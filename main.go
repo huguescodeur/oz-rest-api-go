@@ -8,8 +8,8 @@ import (
 	"os"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/huguescodeur/zoro_rest_api_go/internal/app"
-	"github.com/huguescodeur/zoro_rest_api_go/internal/pkg/config"
+	"github.com/huguescodeur/oz-rest-api-go/internal/app"
+	"github.com/huguescodeur/oz-rest-api-go/internal/pkg/config"
 )
 
 // @title           o'z api

@@ -3,9 +3,9 @@
 // import (
 // 	"database/sql"
 
-// 	"github.com/huguescodeur/zoro_rest_api_go/internal/services"
-// 	"github.com/huguescodeur/zoro_rest_api_go/internal/store"
-// 	"github.com/huguescodeur/zoro_rest_api_go/internal/transport"
+// 	"github.com/huguescodeur/oz-rest-api-go/internal/services"
+// 	"github.com/huguescodeur/oz-rest-api-go/internal/store"
+// 	"github.com/huguescodeur/oz-rest-api-go/internal/transport"
 // )
 
 // type App struct {
@@ -48,9 +48,9 @@ package app
 import (
 	"database/sql"
 
-	"github.com/huguescodeur/zoro_rest_api_go/internal/services"
-	"github.com/huguescodeur/zoro_rest_api_go/internal/store"
-	"github.com/huguescodeur/zoro_rest_api_go/internal/transport"
+	"github.com/huguescodeur/oz-rest-api-go/internal/services"
+	"github.com/huguescodeur/oz-rest-api-go/internal/store"
+	"github.com/huguescodeur/oz-rest-api-go/internal/transport"
 )
 
 type App struct {

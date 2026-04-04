@@ -95,7 +95,7 @@ _(Vous avez un fichier sql pour une base de données test)_
 ### Installation
 
 ```bash
-git clone https://github.com/huguescodeur/zoro_rest_api_go.git
+git clone https://github.com/huguescodeur/oz-rest-api-go.git
 cd zoro_rest_api_go
 go mod download
 ```

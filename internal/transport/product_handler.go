@@ -8,11 +8,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
-	"github.com/huguescodeur/zoro_rest_api_go/internal/models"
-	"github.com/huguescodeur/zoro_rest_api_go/internal/pkg/ctxkeys"
-	"github.com/huguescodeur/zoro_rest_api_go/internal/pkg/errs"
-	"github.com/huguescodeur/zoro_rest_api_go/internal/pkg/responses"
-	"github.com/huguescodeur/zoro_rest_api_go/internal/services"
+	"github.com/huguescodeur/oz-rest-api-go/internal/models"
+	"github.com/huguescodeur/oz-rest-api-go/internal/pkg/ctxkeys"
+	"github.com/huguescodeur/oz-rest-api-go/internal/pkg/errs"
+	"github.com/huguescodeur/oz-rest-api-go/internal/pkg/responses"
+	"github.com/huguescodeur/oz-rest-api-go/internal/services"
 )
 
 type productsResponse struct {

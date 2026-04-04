@@ -4,8 +4,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-	_ "github.com/huguescodeur/zoro_rest_api_go/docs"
-	"github.com/huguescodeur/zoro_rest_api_go/internal/middlewares"
+	_ "github.com/huguescodeur/oz-rest-api-go/docs"
+	"github.com/huguescodeur/oz-rest-api-go/internal/middlewares"
 	httpSwagger "github.com/swaggo/http-swagger"
 )
 

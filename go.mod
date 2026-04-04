@@ -1,4 +1,4 @@
-module github.com/huguescodeur/zoro_rest_api_go
+module github.com/huguescodeur/oz-rest-api-go
 
 go 1.26.1
 

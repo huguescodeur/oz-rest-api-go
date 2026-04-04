@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/huguescodeur/zoro_rest_api_go/internal/pkg/ctxkeys"
+	"github.com/huguescodeur/oz-rest-api-go/internal/pkg/ctxkeys"
 )
 
 func AuthMiddleware(next http.Handler) http.Handler {

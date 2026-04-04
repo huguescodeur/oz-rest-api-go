@@ -5,9 +5,9 @@ import (
 	"os"
 
 	"github.com/google/uuid"
-	"github.com/huguescodeur/zoro_rest_api_go/internal/models"
-	"github.com/huguescodeur/zoro_rest_api_go/internal/pkg/utils"
-	"github.com/huguescodeur/zoro_rest_api_go/internal/store"
+	"github.com/huguescodeur/oz-rest-api-go/internal/models"
+	"github.com/huguescodeur/oz-rest-api-go/internal/pkg/utils"
+	"github.com/huguescodeur/oz-rest-api-go/internal/store"
 	"golang.org/x/crypto/bcrypt"
 )
 
