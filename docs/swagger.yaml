@@ -1,0 +1,1395 @@
+basePath: /api/v1
+definitions:
+  models.Category:
+    properties:
+      category:
+        type: string
+      categoryUUID:
+        type: string
+      id:
+        type: integer
+      ownerID:
+        type: integer
+    required:
+    - category
+    type: object
+  models.Order:
+    properties:
+      created_at:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/models.OrderItem'
+        type: array
+      order_id:
+        type: integer
+      orderUUID:
+        type: string
+      shop_id:
+        type: integer
+      total_amount:
+        type: integer
+      user_id:
+        type: integer
+    type: object
+  models.OrderItem:
+    properties:
+      item_id:
+        type: integer
+      order_id:
+        type: integer
+      product_id:
+        type: integer
+      quantity:
+        type: integer
+      unit_price:
+        type: integer
+    type: object
+  models.Product:
+    properties:
+      category:
+        $ref: '#/definitions/models.Category'
+      createdAt:
+        type: string
+      ownerID:
+        type: integer
+      productID:
+        type: integer
+      productName:
+        type: string
+      productUUID:
+        type: string
+      unitPrice:
+        minimum: 0
+        type: integer
+      updatedAt:
+        type: string
+    required:
+    - category
+    - productName
+    - unitPrice
+    type: object
+  models.Shop:
+    properties:
+      assignedAt:
+        type: string
+      createdAt:
+        type: string
+      ownerID:
+        type: integer
+      shopAddress:
+        type: string
+      shopID:
+        type: integer
+      shopMail:
+        type: string
+      shopName:
+        minLength: 3
+        type: string
+      shopPhone:
+        type: string
+      shopUUID:
+        type: string
+      updatedAt:
+        type: string
+    required:
+    - shopAddress
+    - shopMail
+    - shopName
+    - shopPhone
+    type: object
+  models.Stock:
+    properties:
+      product_id:
+        type: integer
+      product_name:
+        type: string
+      quantity:
+        type: integer
+      shop_id:
+        type: integer
+      shop_name:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  models.StockMovement:
+    properties:
+      comment:
+        type: string
+      created_at:
+        type: string
+      movement_id:
+        type: integer
+      movement_type:
+        type: string
+      product_id:
+        type: integer
+      quantity_change:
+        type: integer
+      shop_id:
+        type: integer
+      user_id:
+        type: integer
+    type: object
+  models.User:
+    properties:
+      UUID:
+        type: string
+      createdAt:
+        type: string
+      deletedAt:
+        type: string
+      email:
+        type: string
+      firstname:
+        type: string
+      id:
+        type: integer
+      lastname:
+        type: string
+      parentID:
+        type: integer
+      password:
+        minLength: 6
+        type: string
+      phone:
+        type: string
+      profilePicture:
+        type: string
+      role:
+        type: string
+      updatedAt:
+        type: string
+      username:
+        type: string
+    required:
+    - email
+    - firstname
+    - lastname
+    - password
+    - phone
+    - role
+    - username
+    type: object
+  transport.AssignShopsRequest:
+    properties:
+      shopIDs:
+        example:
+        - 1
+        - 2
+        - 3
+        items:
+          type: integer
+        type: array
+      vendeurID:
+        example: 5
+        type: integer
+    required:
+    - shopIDs
+    - vendeurID
+    type: object
+  transport.RegisterRequest:
+    properties:
+      email:
+        example: jean@zoro.com
+        type: string
+      firstname:
+        example: Jean
+        type: string
+      lastname:
+        example: Dupont
+        type: string
+      parentId:
+        type: integer
+      password:
+        example: pass1234
+        minLength: 6
+        type: string
+      phone:
+        example: "0708091011"
+        type: string
+      role:
+        enum:
+        - admin
+        - vendeur
+        example: vendeur
+        type: string
+      username:
+        example: jean_vendeur
+        minLength: 3
+        type: string
+    required:
+    - email
+    - firstname
+    - lastname
+    - password
+    - phone
+    - role
+    - username
+    type: object
+  transport.UpdateUserRequest:
+    properties:
+      email:
+        example: nouveau@email.com
+        type: string
+      firstname:
+        example: Prince
+        type: string
+      lastname:
+        example: Konan
+        type: string
+      parentId:
+        type: integer
+      phone:
+        example: "0102030405"
+        type: string
+      role:
+        enum:
+        - admin
+        - vendeur
+        example: vendeur
+        type: string
+      username:
+        example: nouveau_pseudo
+        type: string
+    required:
+    - role
+    type: object
+  transport.adjustStockRequest:
+    properties:
+      comment:
+        type: string
+      movement_type:
+        enum:
+        - SALE
+        - STOCK_IN
+        - GIFT
+        - LOSS
+        - ADJUSTMENT
+        type: string
+      product_id:
+        type: integer
+      quantity_change:
+        type: integer
+      shop_id:
+        type: integer
+    required:
+    - movement_type
+    - product_id
+    - quantity_change
+    - shop_id
+    type: object
+  transport.createOrderRequest:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/transport.orderItemRequest'
+        minItems: 1
+        type: array
+      shop_id:
+        type: integer
+    required:
+    - items
+    - shop_id
+    type: object
+  transport.initStockRequest:
+    properties:
+      product_id:
+        type: integer
+      shop_id:
+        type: integer
+    required:
+    - product_id
+    - shop_id
+    type: object
+  transport.loginRequest:
+    properties:
+      identifier:
+        type: string
+      password:
+        type: string
+    required:
+    - identifier
+    - password
+    type: object
+  transport.orderItemRequest:
+    properties:
+      product_id:
+        type: integer
+      quantity:
+        type: integer
+    required:
+    - product_id
+    - quantity
+    type: object
+  transport.productRequest:
+    properties:
+      categoryID:
+        type: integer
+      productName:
+        type: string
+      unitPrice:
+        minimum: 0
+        type: integer
+    required:
+    - categoryID
+    - productName
+    - unitPrice
+    type: object
+  transport.productsResponse:
+    properties:
+      count:
+        type: integer
+      products:
+        items:
+          $ref: '#/definitions/models.Product'
+        type: array
+    type: object
+  transport.resetPasswordRequest:
+    properties:
+      new_password:
+        minLength: 6
+        type: string
+      old_password:
+        type: string
+    required:
+    - new_password
+    - old_password
+    type: object
+  transport.shopRequest:
+    properties:
+      shopAddress:
+        type: string
+      shopMail:
+        type: string
+      shopName:
+        minLength: 3
+        type: string
+      shopPhone:
+        type: string
+    required:
+    - shopAddress
+    - shopMail
+    - shopName
+    - shopPhone
+    type: object
+  transport.shopsResponse:
+    properties:
+      count:
+        type: integer
+      shops:
+        items:
+          $ref: '#/definitions/models.Shop'
+        type: array
+    type: object
+  transport.stockInRequest:
+    properties:
+      comment:
+        type: string
+      product_id:
+        type: integer
+      quantity:
+        type: integer
+      shop_id:
+        type: integer
+    required:
+    - product_id
+    - quantity
+    - shop_id
+    type: object
+info:
+  contact:
+    email: goliyaohugues@gmail.com
+    name: Support API
+  description: API de gestion des utilisateurs et vendeurs.
+  termsOfService: http://swagger.io/terms/
+  title: o'z api
+  version: "1.0"
+paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authentifie l'utilisateur et retourne un token JWT
+      parameters:
+      - description: Identifiant et mot de passe
+        in: body
+        name: credentials
+        required: true
+        schema:
+          $ref: '#/definitions/transport.loginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'Ex: {user: {}, token: ''...''}'
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Identifiants incorrects
+          schema:
+            type: string
+      summary: Connexion utilisateur
+      tags:
+      - Auth
+  /auth/logout:
+    post:
+      description: Invalide la session (côté client). Retourne un message de confirmation.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'message: Déconnexion réussie'
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Déconnexion
+      tags:
+      - Auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Crée un nouveau compte utilisateur et retourne un token JWT
+      parameters:
+      - description: Données d'inscription
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/transport.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 'Ex: {message: ''...'', user: {}, token: ''...''}'
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Payload ou validation invalide
+          schema:
+            type: string
+      summary: Inscription d'un utilisateur
+      tags:
+      - Auth
+  /auth/reset-password:
+    patch:
+      consumes:
+      - application/json
+      description: Permet à l'utilisateur connecté de modifier son mot de passe
+      parameters:
+      - description: Ancien et nouveau mot de passe
+        in: body
+        name: passwords
+        required: true
+        schema:
+          $ref: '#/definitions/transport.resetPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'message: Mot de passe mis à jour'
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Ancien mot de passe incorrect
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Changement de mot de passe
+      tags:
+      - Auth
+  /orders:
+    get:
+      description: Récupère toutes les commandes de l'utilisateur connecté avec leurs
+        items
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Utilisateur non identifié
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Liste toutes les commandes
+      tags:
+      - Orders
+    post:
+      consumes:
+      - application/json
+      description: Crée une commande, décrémente le stock et enregistre les mouvements
+        SALE
+      parameters:
+      - description: Données de la commande
+        in: body
+        name: order
+        required: true
+        schema:
+          $ref: '#/definitions/transport.createOrderRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Order'
+        "400":
+          description: Données invalides ou stock insuffisant
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Créer une commande
+      tags:
+      - Orders
+  /orders/{uuid}:
+    delete:
+      description: Annule une commande et restaure le stock de chaque item
+      parameters:
+      - description: UUID de la commande
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Commande introuvable
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Annuler une commande
+      tags:
+      - Orders
+    get:
+      description: Récupère une commande par son UUID avec tous ses items
+      parameters:
+      - description: UUID de la commande
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Order'
+        "400":
+          description: Format d'identifiant invalide
+          schema:
+            type: string
+        "404":
+          description: Commande introuvable
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Détails d'une commande
+      tags:
+      - Orders
+  /products:
+    get:
+      consumes:
+      - application/json
+      description: Récupère la liste des produits appartenant à l'utilisateur connecté
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/transport.productsResponse'
+        "401":
+          description: Utilisateur non identifié
+          schema:
+            type: string
+        "500":
+          description: Erreur interne
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Liste tous les produits
+      tags:
+      - Products
+    post:
+      consumes:
+      - application/json
+      description: Ajoute un nouveau produit dans la base de données
+      parameters:
+      - description: Données du produit
+        in: body
+        name: product
+        required: true
+        schema:
+          $ref: '#/definitions/transport.productRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/transport.productRequest'
+        "400":
+          description: Json ou validation invalide
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Créer un produit
+      tags:
+      - Products
+  /products/{uuid}:
+    delete:
+      description: Suppression logique d'un produit (soft delete)
+      parameters:
+      - description: UUID du produit
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Echec de suppression
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Supprimer un produit
+      tags:
+      - Products
+    get:
+      consumes:
+      - application/json
+      description: Récupère un produit spécifique par son UUID (doit appartenir à
+        l'owner)
+      parameters:
+      - description: UUID du produit
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Product'
+        "400":
+          description: Format d'identifiant invalide
+          schema:
+            type: string
+        "404":
+          description: Aucun produit trouvé
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Détails d'un produit
+      tags:
+      - Products
+    patch:
+      consumes:
+      - application/json
+      description: Réactive un produit qui a été supprimé
+      parameters:
+      - description: UUID du produit
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'message: Produit restauré avec succès'
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Erreur lors du restore
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Restaurer un produit
+      tags:
+      - Products
+    put:
+      consumes:
+      - application/json
+      description: Met à jour les informations d'un produit existant
+      parameters:
+      - description: UUID du produit
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Nouvelles données
+        in: body
+        name: product
+        required: true
+        schema:
+          $ref: '#/definitions/transport.productRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Product'
+        "400":
+          description: Données invalides
+          schema:
+            type: string
+        "404":
+          description: Produit introuvable
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Modifier un produit
+      tags:
+      - Products
+  /shops:
+    get:
+      consumes:
+      - application/json
+      description: Récupère la liste des magasins de l'utilisateur
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/transport.shopsResponse'
+        "500":
+          description: Erreur de récupération
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Liste tous les magasins
+      tags:
+      - Shops
+    post:
+      consumes:
+      - application/json
+      description: Ajoute un nouveau magasin
+      parameters:
+      - description: Données du magasin
+        in: body
+        name: shop
+        required: true
+        schema:
+          $ref: '#/definitions/transport.shopRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Shop'
+        "400":
+          description: Json Invalide
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Créer un magasin
+      tags:
+      - Shops
+  /shops/{uuid}:
+    delete:
+      description: Suppression logique (soft delete) d'un magasin
+      parameters:
+      - description: UUID du magasin
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Echec de suppression
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Supprimer un magasin
+      tags:
+      - Shops
+    get:
+      consumes:
+      - application/json
+      description: Récupère un magasin spécifique par son UUID
+      parameters:
+      - description: UUID du magasin
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Shop'
+        "400":
+          description: Format d'identifiant invalide
+          schema:
+            type: string
+        "404":
+          description: Aucun magasin trouvé
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Détails d'un magasin
+      tags:
+      - Shops
+    patch:
+      consumes:
+      - application/json
+      description: Réactive un magasin supprimé
+      parameters:
+      - description: UUID du magasin
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'message: Magasin restauré avec succès'
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Erreur lors du restore
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Restaurer un magasin
+      tags:
+      - Shops
+    put:
+      consumes:
+      - application/json
+      description: Met à jour les informations d'un magasin existant
+      parameters:
+      - description: UUID du magasin
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Nouvelles données
+        in: body
+        name: shop
+        required: true
+        schema:
+          $ref: '#/definitions/transport.shopRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Shop'
+        "400":
+          description: Données invalides
+          schema:
+            type: string
+        "404":
+          description: Mise à jour impossible
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Modifier un magasin
+      tags:
+      - Shops
+  /shops/assign-vendeur:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Lier un vendeur à des magasin.
+        Note: Un Admin ne peut assigner que ses propres vendeurs (parent_id doit correspondre).
+      parameters:
+      - description: IDs du vendeur et des magasins
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/transport.AssignShopsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'message: Assignation réussie'
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Vous n'êtes pas autorisé (Vendeur non lié à cet Admin)
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Assigner un vendeur à des magasins
+      tags:
+      - shops
+  /shops/vendeur:
+    get:
+      consumes:
+      - application/json
+      description: Récupère tous les magasins associés au vendeur connecté (via son
+        ID d'owner)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Liste des magasins avec le compte
+          schema:
+            $ref: '#/definitions/transport.shopsResponse'
+        "401":
+          description: Utilisateur non identifié
+          schema:
+            type: string
+        "404":
+          description: Aucun magasin trouvé
+          schema:
+            type: string
+        "500":
+          description: Erreur interne ou JSON invalide
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Liste les magasins d'un vendeur
+      tags:
+      - Shops
+  /stocks:
+    get:
+      description: Récupère tous les stocks des produits de l'utilisateur connecté
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Stock'
+            type: array
+        "401":
+          description: Utilisateur non identifié
+          schema:
+            type: string
+        "500":
+          description: Erreur interne
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Liste tous les stocks
+      tags:
+      - Stocks
+  /stocks/adjust:
+    post:
+      consumes:
+      - application/json
+      description: Applique un mouvement de stock (SALE, GIFT, LOSS, ADJUSTMENT)
+      parameters:
+      - description: Données du mouvement
+        in: body
+        name: stock
+        required: true
+        schema:
+          $ref: '#/definitions/transport.adjustStockRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Données invalides ou stock insuffisant
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Ajustement manuel de stock
+      tags:
+      - Stocks
+  /stocks/detail:
+    get:
+      description: Récupère le niveau de stock d'un produit dans une boutique spécifique
+      parameters:
+      - description: ID du produit
+        in: query
+        name: product_id
+        required: true
+        type: integer
+      - description: ID de la boutique
+        in: query
+        name: shop_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Stock'
+        "400":
+          description: Paramètres invalides
+          schema:
+            type: string
+        "404":
+          description: Stock introuvable
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Stock d'un produit dans une boutique
+      tags:
+      - Stocks
+  /stocks/in:
+    post:
+      consumes:
+      - application/json
+      description: Ajoute de la quantité en stock (réception de marchandise)
+      parameters:
+      - description: Données d'entrée
+        in: body
+        name: stock
+        required: true
+        schema:
+          $ref: '#/definitions/transport.stockInRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Données invalides
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Entrée de stock
+      tags:
+      - Stocks
+  /stocks/init:
+    post:
+      consumes:
+      - application/json
+      description: Crée une entrée stock à 0 pour un produit dans une boutique
+      parameters:
+      - description: Données d'initialisation
+        in: body
+        name: stock
+        required: true
+        schema:
+          $ref: '#/definitions/transport.initStockRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Données invalides
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Initialiser un stock
+      tags:
+      - Stocks
+  /stocks/movements:
+    get:
+      description: Récupère l'historique complet des mouvements de l'owner
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.StockMovement'
+            type: array
+        "401":
+          description: Utilisateur non identifié
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Liste tous les mouvements de stock
+      tags:
+      - Stocks
+  /stocks/movements/product/{product_id}:
+    get:
+      description: Historique des mouvements pour un produit donné
+      parameters:
+      - description: ID du produit
+        in: path
+        name: product_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.StockMovement'
+            type: array
+        "400":
+          description: product_id invalide
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Mouvements d'un produit
+      tags:
+      - Stocks
+  /stocks/movements/shop/{shop_id}:
+    get:
+      description: Historique des mouvements pour une boutique donnée
+      parameters:
+      - description: ID de la boutique
+        in: path
+        name: shop_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.StockMovement'
+            type: array
+        "400":
+          description: shop_id invalide
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Mouvements d'une boutique
+      tags:
+      - Stocks
+  /users:
+    get:
+      parameters:
+      - description: 'Numéro de la page (défaut: 1)'
+        in: query
+        name: page
+        type: integer
+      - description: 'Nombre d''éléments (défaut: 10)'
+        in: query
+        name: limit
+        type: integer
+      responses: {}
+      summary: Liste paginée des utilisateurs
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Permet à un Admin ou Super Admin de créer un utilisateur.
+        Si l'auteur est Admin, le rôle est forcé à 'vendeur' et lié à son ID.
+        Si l'auteur est Super Admin, il peut définir le rôle.
+      parameters:
+      - description: Données de l'utilisateur à créer (email, username, password,
+          firstname, lastname, phone)
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/models.User'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 'Ex: {message: ''...'', user: {models.User}}'
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Données JSON invalides ou erreur de validation
+          schema:
+            type: string
+        "403":
+          description: 'Accès refusé : privilèges insuffisants'
+          schema:
+            type: string
+        "500":
+          description: Erreur interne du serveur
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Créer un nouvel utilisateur (Admin/Vendeur)
+      tags:
+      - Users
+  /users/{uuid}:
+    delete:
+      parameters:
+      - description: User UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Supprime un utilisateur
+      tags:
+      - users
+    get:
+      consumes:
+      - application/json
+      description: Récupère les détails d'un utilisateur par son UUID.
+      parameters:
+      - description: User UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.User'
+        "400":
+          description: Format d'identifiant invalide
+          schema:
+            type: string
+        "404":
+          description: Aucun utilisateur trouvé
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Récupère un utilisateur
+      tags:
+      - users
+    patch:
+      parameters:
+      - description: User UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "200":
+          description: 'message: Utilisateur restauré'
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Restaure un utilisateur
+      tags:
+      - users
+    put:
+      consumes:
+      - application/json
+      description: Met à jour les informations. Seul 'super' peut changer le rôle
+        ou le parent.
+      parameters:
+      - description: User UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Update User
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/transport.UpdateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.User'
+        "400":
+          description: Données invalides
+          schema:
+            type: string
+        "403":
+          description: Erreur de permission
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Met à jour un utilisateur
+      tags:
+      - users
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" suivi d'un espace et du token JWT.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
