@@ -14,6 +14,7 @@ import (
 
 	"github.com/huguescodeur/oz-rest-api-go/internal/app"
 	"github.com/huguescodeur/oz-rest-api-go/internal/pkg/config"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -47,7 +48,14 @@ func main() {
 		)
 	}
 
-	pool, err := pgxpool.New(ctx, dsn)
+	poolConfig, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		log.Fatalf("impossible de parser la config DB: %v", err)
+	}
+	// Désactive les prepared statements pour compatibilité avec PgBouncer (Supabase pooler)
+	poolConfig.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+
+	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
 		log.Fatalf("impossible de créer le pool de connexions: %v", err)
 	}
