@@ -67,9 +67,15 @@ func (m *Mailer) Enabled() bool {
 
 func (m *Mailer) send(subject, htmlBody, textBody, toEmail, toName string) error {
 	if m.smtpEnabled() {
-		return m.sendSMTP(subject, htmlBody, toEmail, toName)
+		fmt.Printf("[MAILER] SMTP → %s\n", toEmail)
+		err := m.sendSMTP(subject, htmlBody, toEmail, toName)
+		if err != nil {
+			fmt.Printf("[MAILER] SMTP erreur: %v\n", err)
+		}
+		return err
 	}
 	if m.mailjetEnabled() {
+		fmt.Printf("[MAILER] Mailjet → %s\n", toEmail)
 		return m.sendMailjet(mjMessage{
 			From:     mjContact{Email: m.fromEmail, Name: m.fromName},
 			To:       []mjContact{{Email: toEmail, Name: toName}},
