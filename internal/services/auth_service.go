@@ -1,26 +1,43 @@
 package services
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/huguescodeur/oz-rest-api-go/internal/models"
+	"github.com/huguescodeur/oz-rest-api-go/internal/pkg/mailer"
 	"github.com/huguescodeur/oz-rest-api-go/internal/pkg/utils"
 	"github.com/huguescodeur/oz-rest-api-go/internal/store"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type AuthService struct {
-	authStore store.AuthStore
-	userStore store.UserStore
-	secret    string
+	authStore   store.AuthStore
+	userStore   store.UserStore
+	secret      string
+	mailer      *mailer.Mailer
+	frontendURL string
 }
 
 func NewAuthService(s store.AuthStore, u store.UserStore) *AuthService {
-	return &AuthService{authStore: s, userStore: u, secret: os.Getenv("JWT_SECRET")}
+	frontendURL := os.Getenv("FRONTEND_URL")
+	if frontendURL == "" {
+		frontendURL = "http://localhost:5173"
+	}
+	return &AuthService{
+		authStore:   s,
+		userStore:   u,
+		secret:      os.Getenv("JWT_SECRET"),
+		mailer:      mailer.New(),
+		frontendURL: frontendURL,
+	}
 }
 
 func (s *AuthService) generateJWT(user *models.User) (string, error) {
@@ -42,7 +59,7 @@ func (s *AuthService) generateJWT(user *models.User) (string, error) {
 	return token.SignedString(secret)
 }
 
-func (s *AuthService) Register(u *models.User) (*models.User, string, error) {
+func (s *AuthService) Register(ctx context.Context, u *models.User) (*models.User, string, error) {
 	u.Role = "admin"
 	u.ParentID = nil
 
@@ -65,11 +82,11 @@ func (s *AuthService) Register(u *models.User) (*models.User, string, error) {
 	}
 	u.PasswordHash = string(hashed)
 
-	if _, err := s.authStore.CreateUser(u); err != nil {
+	if _, err := s.authStore.CreateUser(ctx, u); err != nil {
 		return nil, "", err
 	}
 
-	userInDB, err := s.authStore.GetByEmailOrUsername(u.Email)
+	userInDB, err := s.authStore.GetByEmailOrUsername(ctx, u.Email)
 	if err != nil {
 		return nil, "", err
 	}
@@ -82,8 +99,8 @@ func (s *AuthService) Register(u *models.User) (*models.User, string, error) {
 	return userInDB, token, nil
 }
 
-func (s *AuthService) Login(identifier, password string) (*models.User, string, error) {
-	user, err := s.authStore.GetByEmailOrUsername(identifier)
+func (s *AuthService) Login(ctx context.Context, identifier, password string) (*models.User, string, error) {
+	user, err := s.authStore.GetByEmailOrUsername(ctx, identifier)
 	if err != nil {
 		return nil, "", err
 	}
@@ -100,8 +117,70 @@ func (s *AuthService) Login(identifier, password string) (*models.User, string, 
 	return user, token, nil
 }
 
-func (s *AuthService) ResetPassword(requesterID int, targetUUID uuid.UUID, oldPassword, newPassword string) error {
-	user, err := s.userStore.GetByUUID(targetUUID)
+func (s *AuthService) UpdateMe(ctx context.Context, userID int, firstname, lastname, username, email, phone string) error {
+	cleanUsername, ok := utils.SanitizeUsername(username)
+	if !ok {
+		return errors.New("format de username invalide")
+	}
+	cleanPhone, ok := utils.SanitizePhone(phone)
+	if !ok {
+		return errors.New("numéro de téléphone invalide")
+	}
+	return s.userStore.UpdateMe(ctx, userID, firstname, lastname, cleanUsername, email, cleanPhone)
+}
+
+func (s *AuthService) ForgotPassword(ctx context.Context, identifier string) error {
+	user, err := s.authStore.GetByEmailOrUsername(ctx, identifier)
+	if err != nil {
+		// On retourne toujours succès pour ne pas révéler si l'email existe
+		return nil
+	}
+
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return fmt.Errorf("génération token: %w", err)
+	}
+	token := hex.EncodeToString(raw)
+	expiresAt := time.Now().Add(15 * time.Minute)
+
+	if err := s.authStore.CreateResetToken(ctx, user.ID, token, expiresAt); err != nil {
+		return fmt.Errorf("création token: %w", err)
+	}
+
+	resetLink := fmt.Sprintf("%s/reset-password?token=%s", s.frontendURL, token)
+	fullName := user.Firstname + " " + user.Lastname
+	go func() {
+		if err := s.mailer.SendPasswordReset(user.Email, fullName, resetLink); err != nil {
+			fmt.Printf("[AUTH] Erreur envoi email reset à %s: %v\n", user.Email, err)
+		}
+	}()
+	return nil
+}
+
+func (s *AuthService) ValidateResetToken(ctx context.Context, token string) error {
+	_, err := s.authStore.GetValidResetToken(ctx, token)
+	return err
+}
+
+func (s *AuthService) ResetPasswordByToken(ctx context.Context, token, newPassword string) error {
+	rt, err := s.authStore.GetValidResetToken(ctx, token)
+	if err != nil {
+		return err
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	if err := s.authStore.UpdatePassword(ctx, rt.UserID, string(hash)); err != nil {
+		return err
+	}
+	return s.authStore.MarkTokenUsed(ctx, token)
+}
+
+func (s *AuthService) ResetPassword(ctx context.Context, requesterID int, targetUUID uuid.UUID, oldPassword, newPassword string) error {
+	user, err := s.userStore.GetByUUID(ctx, targetUUID)
 	if err != nil {
 		return errors.New("utilisateur non trouvé")
 	}
@@ -116,5 +195,5 @@ func (s *AuthService) ResetPassword(requesterID int, targetUUID uuid.UUID, oldPa
 
 	newHash, _ := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 
-	return s.authStore.UpdatePassword(user.ID, string(newHash))
+	return s.authStore.UpdatePassword(ctx, user.ID, string(newHash))
 }

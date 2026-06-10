@@ -2,8 +2,9 @@ package transport
 
 import (
 	"encoding/json"
-	"fmt"
+	"math"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -24,7 +25,6 @@ type productRequest struct {
 	Name       string `json:"productName" validate:"required"`
 	CategoryID int    `json:"categoryID" validate:"required"`
 	UnitPrice  int    `json:"unitPrice" validate:"required,gte=0"`
-	// OwnerID     int       `json:"ownerID" validate:"required"`
 }
 
 type ProductHandler struct {
@@ -33,120 +33,100 @@ type ProductHandler struct {
 }
 
 func NewProductHandler(s *services.ProductService) *ProductHandler {
-	return &ProductHandler{
-		productService: s,
-		validate:       validator.New(),
-	}
+	return &ProductHandler{productService: s, validate: validator.New()}
 }
 
 // AllProductHandler godoc
-// @Summary      Liste tous les produits
-// @Description  Récupère la liste des produits appartenant à l'utilisateur connecté
+// @Summary      Liste paginée des produits
 // @Tags         Products
-// @Accept       json
-// @Produce      json
+// @Param        page   query  int  false  "Numéro de la page (défaut: 1)"
+// @Param        limit  query  int  false  "Nombre d'éléments (défaut: 20)"
 // @Security     BearerAuth
-// @Success      200  {object}  productsResponse
-// @Failure      401  {string}  string "Utilisateur non identifié"
-// @Failure      500  {string}  string "Erreur interne"
+// @Success      200  {object}  map[string]any
 // @Router       /products [get]
 func (h *ProductHandler) AllProductHandler(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := r.Context().Value(ctxkeys.OwnerIDKey).(int)
-	// fmt.Printf("Owner ID: %+v", ownerID)
+	ctx := r.Context()
+	ownerID, ok := ctx.Value(ctxkeys.OwnerIDKey).(int)
 	if !ok {
 		http.Error(w, "Utilisateur non identifié", http.StatusUnauthorized)
 		return
 	}
 
-	products, err := h.productService.GetAllProducts(ownerID)
-	if err != nil {
-		code := errs.MapHTTPError(err)
-		// http.Error(w, err.Error(), http.StatusInternalServerError)
-		http.Error(w, "Erreur de récupération: "+err.Error(), code)
-		return
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
 	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit < 1 {
+		limit = 20
+	}
+	offset := (page - 1) * limit
 
-	response := productsResponse{
-		Count:    len(products),
-		Products: products,
+	products, total, err := h.productService.GetAllProducts(ctx, ownerID, limit, offset)
+	if err != nil {
+		http.Error(w, errs.SafeMessage(err, errs.MapHTTPError(err)), errs.MapHTTPError(err))
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, "Json invalide", http.StatusInternalServerError)
-		return
-	}
-
+	json.NewEncoder(w).Encode(map[string]any{
+		"products":    products,
+		"total":       total,
+		"page":        page,
+		"limit":       limit,
+		"total_pages": math.Ceil(float64(total) / float64(limit)),
+	})
 }
 
 // GetProductByUUIDHandler godoc
 // @Summary      Détails d'un produit
-// @Description  Récupère un produit spécifique par son UUID (doit appartenir à l'owner)
 // @Tags         Products
-// @Accept       json
-// @Produce      json
-// @Param        uuid   path      string  true  "UUID du produit"
+// @Param        uuid  path  string  true  "UUID du produit"
 // @Security     BearerAuth
 // @Success      200  {object}  models.Product
-// @Failure      400  {string}  string "Format d'identifiant invalide"
-// @Failure      404  {string}  string "Aucun produit trouvé"
 // @Router       /products/{uuid} [get]
 func (h *ProductHandler) GetProductByUUIDHandler(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := r.Context().Value(ctxkeys.OwnerIDKey).(int)
-	// fmt.Printf("Owner ID: %+v\n", ownerID)
+	ctx := r.Context()
+	ownerID, ok := ctx.Value(ctxkeys.OwnerIDKey).(int)
 	if !ok {
 		http.Error(w, "Utilisateur non identifié", http.StatusUnauthorized)
 		return
 	}
 
-	uuidStr := chi.URLParam(r, "uuid")
-	productUUID, err := uuid.Parse(uuidStr)
+	productUUID, err := uuid.Parse(chi.URLParam(r, "uuid"))
 	if err != nil {
 		http.Error(w, "Format d'identifiant invalide", http.StatusBadRequest)
 		return
 	}
 
-	product, err := h.productService.GetProductByUUID(productUUID, ownerID)
+	product, err := h.productService.GetProductByUUID(ctx, productUUID, ownerID)
 	if err != nil {
-		code := errs.MapHTTPError(err)
-		http.Error(
-			w,
-			"Aucun produit trouvé:"+err.Error(),
-			// err.Error(),
-			code)
+		http.Error(w, errs.SafeMessage(err, errs.MapHTTPError(err)), errs.MapHTTPError(err))
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(product); err != nil {
-		http.Error(w, "Json invalide", http.StatusInternalServerError)
-		return
-	}
-
+	json.NewEncoder(w).Encode(product)
 }
 
 // CreateProductHandler godoc
 // @Summary      Créer un produit
-// @Description  Ajoute un nouveau produit dans la base de données
 // @Tags         Products
 // @Accept       json
 // @Produce      json
-// @Param        product  body      productRequest  true  "Données du produit"
+// @Param        product  body  productRequest  true  "Données du produit"
 // @Security     BearerAuth
-// @Success      201  {object}  productRequest
-// @Failure      400  {string}  string "Json ou validation invalide"
+// @Success      201  {object}  models.Product
 // @Router       /products [post]
 func (h *ProductHandler) CreateProductHandler(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := r.Context().Value(ctxkeys.OwnerIDKey).(int)
+	ctx := r.Context()
+	ownerID, ok := ctx.Value(ctxkeys.OwnerIDKey).(int)
 	if !ok {
 		http.Error(w, "Utilisateur non identifié", http.StatusUnauthorized)
 		return
 	}
 
 	var req productRequest
-
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Json Invalide", http.StatusBadRequest)
 		return
@@ -163,17 +143,13 @@ func (h *ProductHandler) CreateProductHandler(w http.ResponseWriter, r *http.Req
 		UnitPrice:   req.UnitPrice,
 		OwnerID:     ownerID,
 	}
-
 	if req.CategoryID > 0 {
-		productModel.ProductCategory = &models.Category{
-			CategoryID: req.CategoryID,
-		}
+		productModel.ProductCategory = &models.Category{CategoryID: req.CategoryID}
 	}
 
-	product, err := h.productService.CreateProduct(productModel)
+	product, err := h.productService.CreateProduct(ctx, productModel)
 	if err != nil {
-		code := errs.MapHTTPError(err)
-		http.Error(w, "Erreur lors de la création: "+err.Error(), code)
+		http.Error(w, errs.SafeMessage(err, errs.MapHTTPError(err)), errs.MapHTTPError(err))
 		return
 	}
 
@@ -184,129 +160,103 @@ func (h *ProductHandler) CreateProductHandler(w http.ResponseWriter, r *http.Req
 
 // UpdateProductByUUIDHandler godoc
 // @Summary      Modifier un produit
-// @Description  Met à jour les informations d'un produit existant
 // @Tags         Products
-// @Accept       json
-// @Produce      json
-// @Param        uuid     path      string          true  "UUID du produit"
-// @Param        product  body      productRequest  true  "Nouvelles données"
+// @Param        uuid     path  string          true  "UUID du produit"
+// @Param        product  body  productRequest  true  "Nouvelles données"
 // @Security     BearerAuth
 // @Success      200  {object}  models.Product
-// @Failure      400  {string}  string "Données invalides"
-// @Failure      404  {string}  string "Produit introuvable"
 // @Router       /products/{uuid} [put]
 func (h *ProductHandler) UpdateProductByUUIDHandler(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := r.Context().Value(ctxkeys.OwnerIDKey).(int)
+	ctx := r.Context()
+	ownerID, ok := ctx.Value(ctxkeys.OwnerIDKey).(int)
 	if !ok {
 		http.Error(w, "Utilisateur non identifié", http.StatusUnauthorized)
+		return
+	}
+
+	productUUID, err := uuid.Parse(chi.URLParam(r, "uuid"))
+	if err != nil {
+		http.Error(w, "Format d'identifiant invalide", http.StatusBadRequest)
 		return
 	}
 
 	var req productRequest
-	uuidStr := chi.URLParam(r, "uuid")
-
-	productUUID, err := uuid.Parse(uuidStr)
-	if err != nil {
-		http.Error(w, "Format d'identifiant invalide", http.StatusBadRequest)
-		return
-	}
-
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Json invalide", http.StatusBadRequest)
 		return
 	}
-	fmt.Printf("Requête reçue : %+v\n", req)
 
-	productModel := &models.Product{
-		ProductName: req.Name,
-		UnitPrice:   req.UnitPrice,
-		OwnerID:     ownerID,
-	}
-
+	productModel := &models.Product{ProductName: req.Name, UnitPrice: req.UnitPrice, OwnerID: ownerID}
 	if req.CategoryID > 0 {
-		productModel.ProductCategory = &models.Category{
-			CategoryID: req.CategoryID,
-		}
+		productModel.ProductCategory = &models.Category{CategoryID: req.CategoryID}
 	}
 
-	product, err := h.productService.UpdateProduct(productUUID, ownerID, productModel)
-
+	product, err := h.productService.UpdateProduct(ctx, productUUID, ownerID, productModel)
 	if err != nil {
-		code := errs.MapHTTPError(err)
-		http.Error(w, "Mise à jour impossible: "+err.Error(), code)
+		http.Error(w, errs.SafeMessage(err, errs.MapHTTPError(err)), errs.MapHTTPError(err))
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(product)
 }
 
 // DeleteProductByUUIDHandler godoc
-// @Summary      Supprimer un produit
-// @Description  Suppression logique d'un produit (soft delete)
+// @Summary      Supprimer un produit (soft delete)
 // @Tags         Products
-// @Param        uuid   path      string  true  "UUID du produit"
+// @Param        uuid  path  string  true  "UUID du produit"
 // @Security     BearerAuth
 // @Success      204  "No Content"
-// @Failure      404  {string}  string "Echec de suppression"
 // @Router       /products/{uuid} [delete]
 func (h *ProductHandler) DeleteProductByUUIDHandler(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := r.Context().Value(ctxkeys.OwnerIDKey).(int)
+	ctx := r.Context()
+	ownerID, ok := ctx.Value(ctxkeys.OwnerIDKey).(int)
 	if !ok {
 		http.Error(w, "Utilisateur non identifié", http.StatusUnauthorized)
 		return
 	}
 
-	uuidStr := chi.URLParam(r, "uuid")
-	productUUID, err := uuid.Parse(uuidStr)
+	productUUID, err := uuid.Parse(chi.URLParam(r, "uuid"))
 	if err != nil {
 		http.Error(w, "Format d'identifiant invalide", http.StatusBadRequest)
 		return
 	}
 
-	if err := h.productService.DeleteProduct(productUUID, ownerID); err != nil {
-		code := errs.MapHTTPError(err)
-		http.Error(w, "Echec de suppression: "+err.Error(), code)
+	if err := h.productService.DeleteProduct(ctx, productUUID, ownerID); err != nil {
+		http.Error(w, errs.SafeMessage(err, errs.MapHTTPError(err)), errs.MapHTTPError(err))
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Produit supprimé avec succès"})
 }
 
 // RestoreProductByUUIDHandler godoc
 // @Summary      Restaurer un produit
-// @Description  Réactive un produit qui a été supprimé
 // @Tags         Products
-// @Accept       json
-// @Produce      json
-// @Param        uuid   path      string  true  "UUID du produit"
+// @Param        uuid  path  string  true  "UUID du produit"
 // @Security     BearerAuth
-// @Success      200  {object}  map[string]string "message: Produit restauré avec succès"
-// @Failure      404  {string}  string "Erreur lors du restore"
+// @Success      200  {object}  map[string]string
 // @Router       /products/{uuid} [patch]
 func (h *ProductHandler) RestoreProductByUUIDHandler(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := r.Context().Value(ctxkeys.OwnerIDKey).(int)
+	ctx := r.Context()
+	ownerID, ok := ctx.Value(ctxkeys.OwnerIDKey).(int)
 	if !ok {
 		http.Error(w, "Utilisateur non identifié", http.StatusUnauthorized)
 		return
 	}
 
-	uuidStr := chi.URLParam(r, "uuid")
-	productUUID, err := uuid.Parse(uuidStr)
+	productUUID, err := uuid.Parse(chi.URLParam(r, "uuid"))
 	if err != nil {
 		http.Error(w, "Format d'identifiant invalide", http.StatusBadRequest)
 		return
 	}
 
-	if err := h.productService.RestoreProduct(productUUID, ownerID); err != nil {
-		code := errs.MapHTTPError(err)
-		http.Error(w, "Erreur lors du restore: "+err.Error(), code)
+	if err := h.productService.RestoreProduct(ctx, productUUID, ownerID); err != nil {
+		http.Error(w, errs.SafeMessage(err, errs.MapHTTPError(err)), errs.MapHTTPError(err))
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Produit restauré avec succès"})
 }
 

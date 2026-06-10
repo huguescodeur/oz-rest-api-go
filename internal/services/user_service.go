@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"os"
 
@@ -21,10 +22,12 @@ func NewUserService(s store.UserStore, a store.AuthStore) *UserService {
 	return &UserService{userStore: s, authStore: a, secret: os.Getenv("JWT_SECRET")}
 }
 
-func (u *UserService) CreateUser(user *models.User, ownerID int, ownerRole string) (*models.User, error) {
+func (u *UserService) CreateUser(ctx context.Context, user *models.User, ownerID int, ownerRole string) (*models.User, error) {
 	if ownerRole != "admin" && ownerRole != "super" {
 		return nil, errors.New("accès refusé : privilèges insuffisants")
 	}
+
+	shopID := user.ShopID
 
 	switch ownerRole {
 	case "admin":
@@ -56,37 +59,41 @@ func (u *UserService) CreateUser(user *models.User, ownerID int, ownerRole strin
 	}
 	user.PasswordHash = string(hashed)
 
-	if _, err := u.userStore.CreateUser(user); err != nil {
-		return nil, err
-	}
-
-	userInDB, err := u.authStore.GetByEmailOrUsername(user.Email)
+	created, err := u.userStore.CreateUser(ctx, user)
 	if err != nil {
 		return nil, err
 	}
 
-	return userInDB, nil
+	if shopID != nil && *shopID > 0 {
+		if err := u.userStore.AssignShop(ctx, created.ID, *shopID); err != nil {
+			return nil, err
+		}
+	}
+
+	return u.authStore.GetByEmailOrUsername(ctx, user.Email)
 }
 
-func (u *UserService) GetAllUser(ownerID int, ownerRole string, limit, offset int) ([]*models.User, int, error) {
+func (u *UserService) GetAllUser(ctx context.Context, ownerID int, ownerRole string, limit, offset int, showArchived bool) ([]*models.User, int, error) {
 	if ownerRole == "super" {
-		return u.userStore.GetAll(limit, offset)
+		return u.userStore.GetAll(ctx, limit, offset)
 	}
 	if ownerRole == "vendeur" {
 		return nil, 0, errors.New("accès interdit")
 	}
-	return u.userStore.GetAllByOwner(ownerID, limit, offset)
-}
-
-func (u *UserService) GetUserByUUID(userUUID uuid.UUID, ownerID int, ownerRole string) (*models.User, error) {
-	if ownerRole == "super" {
-		return u.userStore.GetByUUID(userUUID)
+	if showArchived {
+		return u.userStore.GetArchivedByOwner(ctx, ownerID, limit, offset)
 	}
-
-	return u.userStore.GetByUUIDWithParent(userUUID, ownerID)
+	return u.userStore.GetAllByOwner(ctx, ownerID, limit, offset)
 }
 
-func (u *UserService) UpdateUser(targetUUID uuid.UUID, input *models.User, ownerID int, ownerRole string) (*models.User, error) {
+func (u *UserService) GetUserByUUID(ctx context.Context, userUUID uuid.UUID, ownerID int, ownerRole string) (*models.User, error) {
+	if ownerRole == "super" {
+		return u.userStore.GetByUUID(ctx, userUUID)
+	}
+	return u.userStore.GetByUUIDWithParent(ctx, userUUID, ownerID)
+}
+
+func (u *UserService) UpdateUser(ctx context.Context, targetUUID uuid.UUID, input *models.User, ownerID int, ownerRole string) (*models.User, error) {
 	cleanUsername, ok := utils.SanitizeUsername(input.Username)
 	if !ok {
 		return nil, errors.New("format de username invalide (lettres, chiffres, underscore, doit commencer par une lettre)")
@@ -99,10 +106,7 @@ func (u *UserService) UpdateUser(targetUUID uuid.UUID, input *models.User, owner
 	}
 	input.Phone = cleanPhone
 
-	// fmt.Printf("Clean Username: %+v\n", cleanUsername)
-	// fmt.Printf("Clean Phone: %+v\n", cleanPhone)
-
-	existingUser, err := u.GetUserByUUID(targetUUID, ownerID, ownerRole)
+	existingUser, err := u.GetUserByUUID(ctx, targetUUID, ownerID, ownerRole)
 	if err != nil {
 		return nil, err
 	}
@@ -119,11 +123,9 @@ func (u *UserService) UpdateUser(targetUUID uuid.UUID, input *models.User, owner
 	if input.Phone != "" {
 		existingUser.Phone = input.Phone
 	}
-
 	if (ownerID == existingUser.ID || ownerRole == "super") && input.Email != "" {
 		existingUser.Email = input.Email
 	}
-
 	if ownerRole == "super" {
 		if input.Role != "" {
 			existingUser.Role = input.Role
@@ -133,27 +135,62 @@ func (u *UserService) UpdateUser(targetUUID uuid.UUID, input *models.User, owner
 		}
 	}
 
-	updatedUser, err := u.userStore.Update(existingUser)
+	result, err := u.userStore.Update(ctx, existingUser)
 	if err != nil {
 		return nil, err
 	}
 
-	return updatedUser, nil
-
-}
-
-func (u *UserService) DeleteUser(userUUID uuid.UUID, ownerID int, ownerRole string) error {
-	if ownerRole == "super" {
-		return u.userStore.Delete(userUUID)
+	if input.ShopID != nil {
+		if err := u.userStore.AssignShop(ctx, existingUser.ID, *input.ShopID); err != nil {
+			return nil, err
+		}
 	}
 
-	return u.userStore.DeleteByOwner(userUUID, ownerID)
+	return result, nil
 }
 
-func (u *UserService) RestoreUser(userUUID uuid.UUID, ownerID int, ownerRole string) error {
+func (u *UserService) DeleteUser(ctx context.Context, userUUID uuid.UUID, ownerID int, ownerRole string) error {
 	if ownerRole == "super" {
-		return u.userStore.Restore(userUUID)
+		return u.userStore.Delete(ctx, userUUID)
 	}
+	return u.userStore.DeleteByOwner(ctx, userUUID, ownerID)
+}
 
-	return u.userStore.RestoreByOwner(userUUID, ownerID)
+func (u *UserService) GetMyShops(ctx context.Context, userID int) ([]*models.Shop, error) {
+	return u.userStore.GetMyShops(ctx, userID)
+}
+
+func (u *UserService) AssignShops(ctx context.Context, targetUUID uuid.UUID, ownerID int, shopIDs []int) error {
+	target, err := u.userStore.GetByUUIDWithParent(ctx, targetUUID, ownerID)
+	if err != nil {
+		return err
+	}
+	return u.userStore.AssignShops(ctx, target.ID, shopIDs)
+}
+
+func (u *UserService) GetUserShops(ctx context.Context, targetUUID uuid.UUID, ownerID int) ([]*models.Shop, error) {
+	target, err := u.userStore.GetByUUIDWithParent(ctx, targetUUID, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	return u.userStore.GetMyShops(ctx, target.ID)
+}
+
+func (u *UserService) UpdateMe(ctx context.Context, userID int, firstname, lastname, username, email, phone string) error {
+	cleanUsername, ok := utils.SanitizeUsername(username)
+	if !ok {
+		return errors.New("format de username invalide")
+	}
+	cleanPhone, ok := utils.SanitizePhone(phone)
+	if !ok {
+		return errors.New("numéro de téléphone invalide")
+	}
+	return u.userStore.UpdateMe(ctx, userID, firstname, lastname, cleanUsername, email, cleanPhone)
+}
+
+func (u *UserService) RestoreUser(ctx context.Context, userUUID uuid.UUID, ownerID int, ownerRole string) error {
+	if ownerRole == "super" {
+		return u.userStore.Restore(ctx, userUUID)
+	}
+	return u.userStore.RestoreByOwner(ctx, userUUID, ownerID)
 }

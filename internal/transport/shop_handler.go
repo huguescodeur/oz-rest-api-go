@@ -2,7 +2,9 @@ package transport
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -26,36 +28,31 @@ type shopRequest struct {
 	ShopMail    string `json:"shopMail" validate:"required"`
 }
 
+type AssignShopsRequest struct {
+	ShopIDs   []int `json:"shopIDs" validate:"required"`
+	VendeurID int   `json:"vendeurID" validate:"required"`
+}
+
 type ShopHandler struct {
 	shopService *services.ShopService
 	validate    *validator.Validate
 }
 
-type AssignShopsRequest struct {
-	ShopIDs   []int `json:"shopIDs" validate:"required" example:"1,2,3"`
-	VendeurID int   `json:"vendeurID" validate:"required" example:"5"`
-}
-
 func NewShopHandler(s *services.ShopService) *ShopHandler {
-	return &ShopHandler{
-		shopService: s,
-		validate:    validator.New(),
-	}
+	return &ShopHandler{shopService: s, validate: validator.New()}
 }
 
 // AssignVendeurToShopsHandler godoc
 // @Summary      Assigner un vendeur à des magasins
-// @Description  Lier un vendeur à des magasin.
-// @Description  Note: Un Admin ne peut assigner que ses propres vendeurs (parent_id doit correspondre).
 // @Tags         shops
 // @Accept       json
 // @Produce      json
-// @Param        payload  body      AssignShopsRequest  true  "IDs du vendeur et des magasins"
-// @Success      200      {object}  map[string]string   "message: Assignation réussie"
-// @Failure      403      {string}  string              "Vous n'êtes pas autorisé (Vendeur non lié à cet Admin)"
-// @Router       /shops/assign-vendeur [post]
+// @Param        payload  body  AssignShopsRequest  true  "IDs du vendeur et des magasins"
 // @Security     BearerAuth
+// @Success      200  {object}  map[string]string
+// @Router       /shops/assign-vendeur [post]
 func (h *ShopHandler) AssignVendeurToShopsHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	var req AssignShopsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "JSON invalide", http.StatusBadRequest)
@@ -67,13 +64,11 @@ func (h *ShopHandler) AssignVendeurToShopsHandler(w http.ResponseWriter, r *http
 		return
 	}
 
-	ownerID, _ := r.Context().Value(ctxkeys.OwnerIDKey).(int)
-	ownerRole, _ := r.Context().Value(ctxkeys.UserRoleKey).(string)
+	ownerID, _ := ctx.Value(ctxkeys.OwnerIDKey).(int)
+	ownerRole, _ := ctx.Value(ctxkeys.UserRoleKey).(string)
 
-	err := h.shopService.AssignVendeurToShops(req.VendeurID, req.ShopIDs, ownerID, ownerRole)
-	if err != nil {
-		code := errs.MapHTTPError(err)
-		http.Error(w, "Erreur d'assignation: "+err.Error(), code)
+	if err := h.shopService.AssignVendeurToShops(ctx, req.VendeurID, req.ShopIDs, ownerID, ownerRole); err != nil {
+		http.Error(w, errs.SafeMessage(err, errs.MapHTTPError(err)), errs.MapHTTPError(err))
 		return
 	}
 
@@ -82,121 +77,95 @@ func (h *ShopHandler) AssignVendeurToShopsHandler(w http.ResponseWriter, r *http
 }
 
 // AllShopHandler godoc
-// @Summary      Liste tous les magasins
-// @Description  Récupère la liste des magasins de l'utilisateur
+// @Summary      Liste paginée des magasins
 // @Tags         Shops
-// @Accept       json
-// @Produce      json
+// @Param        page   query  int  false  "Numéro de la page (défaut: 1)"
+// @Param        limit  query  int  false  "Nombre d'éléments (défaut: 20)"
 // @Security     BearerAuth
-// @Success      200  {object}  shopsResponse
-// @Failure      500  {string}  string "Erreur de récupération"
+// @Success      200  {object}  map[string]any
 // @Router       /shops [get]
 func (h *ShopHandler) AllShopHandler(w http.ResponseWriter, r *http.Request) {
-	ownerID, ok := r.Context().Value(ctxkeys.OwnerIDKey).(int)
+	ctx := r.Context()
+	ownerID, ok := ctx.Value(ctxkeys.OwnerIDKey).(int)
 	if !ok {
 		http.Error(w, "Utilisateur non identifié", http.StatusUnauthorized)
 		return
 	}
 
-	shops, err := h.shopService.GetAllShops(ownerID)
-	if err != nil {
-		code := errs.MapHTTPError(err)
-		// http.Error(w, err.Error(), http.StatusInternalServerError)
-		http.Error(w, "Erreur de récupération: "+err.Error(), code)
-		return
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
 	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit < 1 {
+		limit = 20
+	}
+	offset := (page - 1) * limit
 
-	response := shopsResponse{
-		Count: len(shops),
-		Shops: shops,
+	shops, total, err := h.shopService.GetAllShops(ctx, ownerID, limit, offset)
+	if err != nil {
+		http.Error(w, errs.SafeMessage(err, errs.MapHTTPError(err)), errs.MapHTTPError(err))
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, "Json invalide", http.StatusInternalServerError)
-		return
-	}
-
+	json.NewEncoder(w).Encode(map[string]any{
+		"shops":       shops,
+		"total":       total,
+		"page":        page,
+		"limit":       limit,
+		"total_pages": math.Ceil(float64(total) / float64(limit)),
+	})
 }
 
 // AllShopVendeurHandler godoc
 // @Summary      Liste les magasins d'un vendeur
-// @Description  Récupère tous les magasins associés au vendeur connecté (via son ID d'owner)
 // @Tags         Shops
-// @Accept       json
-// @Produce      json
 // @Security     BearerAuth
-// @Success      200  {object}  shopsResponse "Liste des magasins avec le compte"
-// @Failure      401  {string}  string "Utilisateur non identifié"
-// @Failure      404  {string}  string "Aucun magasin trouvé"
-// @Failure      500  {string}  string "Erreur interne ou JSON invalide"
+// @Success      200  {object}  shopsResponse
 // @Router       /shops/vendeur [get]
 func (h *ShopHandler) AllShopVendeurHandler(w http.ResponseWriter, r *http.Request) {
-	vendeurID, ok := r.Context().Value(ctxkeys.OwnerIDKey).(int)
+	ctx := r.Context()
+	vendeurID, ok := ctx.Value(ctxkeys.OwnerIDKey).(int)
 	if !ok {
 		http.Error(w, "Utilisateur non identifié", http.StatusUnauthorized)
 		return
 	}
 
-	shops, err := h.shopService.GetAllShopsVendeur(vendeurID)
+	shops, err := h.shopService.GetAllShopsVendeur(ctx, vendeurID)
 	if err != nil {
-		code := errs.MapHTTPError(err)
-		// http.Error(w, err.Error(), http.StatusInternalServerError)
-		http.Error(w, "Erreur de récupération: "+err.Error(), code)
+		http.Error(w, errs.SafeMessage(err, errs.MapHTTPError(err)), errs.MapHTTPError(err))
 		return
-	}
-
-	response := shopsResponse{
-		Count: len(shops),
-		Shops: shops,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, "Json invalide", http.StatusInternalServerError)
-		return
-	}
-
+	json.NewEncoder(w).Encode(shopsResponse{Count: len(shops), Shops: shops})
 }
 
 // GetShopByUUIDHandler godoc
 // @Summary      Détails d'un magasin
-// @Description  Récupère un magasin spécifique par son UUID
 // @Tags         Shops
-// @Accept       json
-// @Produce      json
-// @Param        uuid   path      string  true  "UUID du magasin"
+// @Param        uuid  path  string  true  "UUID du magasin"
 // @Security     BearerAuth
 // @Success      200  {object}  models.Shop
-// @Failure      400  {string}  string "Format d'identifiant invalide"
-// @Failure      404  {string}  string "Aucun magasin trouvé"
 // @Router       /shops/{uuid} [get]
 func (h *ShopHandler) GetShopByUUIDHandler(w http.ResponseWriter, r *http.Request) {
-	uuidStr := chi.URLParam(r, "uuid")
-	shopUUID, err := uuid.Parse(uuidStr)
+	ctx := r.Context()
+	shopUUID, err := uuid.Parse(chi.URLParam(r, "uuid"))
 	if err != nil {
 		http.Error(w, "Format d'identifiant invalide", http.StatusBadRequest)
 		return
 	}
 
-	ownerID, ok := r.Context().Value(ctxkeys.OwnerIDKey).(int)
+	ownerID, ok := ctx.Value(ctxkeys.OwnerIDKey).(int)
 	if !ok {
 		http.Error(w, "Utilisateur non identifié", http.StatusUnauthorized)
 		return
 	}
 
-	shop, err := h.shopService.GetShopByUUID(shopUUID, ownerID)
+	shop, err := h.shopService.GetShopByUUID(ctx, shopUUID, ownerID)
 	if err != nil {
-		code := errs.MapHTTPError(err)
-		http.Error(
-			w,
-			"Aucun magasin trouvé:"+err.Error(),
-			// err.Error(),
-			code)
+		http.Error(w, errs.SafeMessage(err, errs.MapHTTPError(err)), errs.MapHTTPError(err))
 		return
 	}
 
@@ -206,16 +175,15 @@ func (h *ShopHandler) GetShopByUUIDHandler(w http.ResponseWriter, r *http.Reques
 
 // CreateShopHandler godoc
 // @Summary      Créer un magasin
-// @Description  Ajoute un nouveau magasin
 // @Tags         Shops
 // @Accept       json
 // @Produce      json
-// @Param        shop  body      shopRequest  true  "Données du magasin"
+// @Param        shop  body  shopRequest  true  "Données du magasin"
 // @Security     BearerAuth
 // @Success      201  {object}  models.Shop
-// @Failure      400  {string}  string "Json Invalide"
 // @Router       /shops [post]
 func (h *ShopHandler) CreateShopHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	var req shopRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Json Invalide", http.StatusBadRequest)
@@ -227,13 +195,14 @@ func (h *ShopHandler) CreateShopHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	ownerID, ok := r.Context().Value(ctxkeys.OwnerIDKey).(int)
+	ownerID, ok := ctx.Value(ctxkeys.OwnerIDKey).(int)
 	if !ok {
 		http.Error(w, "Utilisateur non identifié", http.StatusUnauthorized)
 		return
 	}
 
 	shopCreate := &models.Shop{
+		ShopUUID:    uuid.New(),
 		ShopName:    req.ShopName,
 		ShopAddress: req.ShopAddress,
 		ShopPhone:   req.ShopPhone,
@@ -241,12 +210,9 @@ func (h *ShopHandler) CreateShopHandler(w http.ResponseWriter, r *http.Request) 
 		OwnerID:     ownerID,
 	}
 
-	shopCreate.ShopUUID = uuid.New()
-
-	shop, err := h.shopService.CreateShop(shopCreate)
+	shop, err := h.shopService.CreateShop(ctx, shopCreate)
 	if err != nil {
-		code := errs.MapHTTPError(err)
-		http.Error(w, "Erreur lors de la création: "+err.Error(), code)
+		http.Error(w, errs.SafeMessage(err, errs.MapHTTPError(err)), errs.MapHTTPError(err))
 		return
 	}
 
@@ -257,32 +223,27 @@ func (h *ShopHandler) CreateShopHandler(w http.ResponseWriter, r *http.Request) 
 
 // UpdateShopByUUIDHandler godoc
 // @Summary      Modifier un magasin
-// @Description  Met à jour les informations d'un magasin existant
 // @Tags         Shops
-// @Accept       json
-// @Produce      json
-// @Param        uuid  path      string       true  "UUID du magasin"
-// @Param        shop  body      shopRequest  true  "Nouvelles données"
+// @Param        uuid  path  string      true  "UUID du magasin"
+// @Param        shop  body  shopRequest  true  "Nouvelles données"
 // @Security     BearerAuth
 // @Success      200  {object}  models.Shop
-// @Failure      400  {string}  string "Données invalides"
-// @Failure      404  {string}  string "Mise à jour impossible"
 // @Router       /shops/{uuid} [put]
 func (h *ShopHandler) UpdateShopByUUIDHandler(w http.ResponseWriter, r *http.Request) {
-	var req shopRequest
-	uuidStr := chi.URLParam(r, "uuid")
-	ownerID, ok := r.Context().Value(ctxkeys.OwnerIDKey).(int)
-	if !ok {
-		http.Error(w, "Utilisateur non identifié", http.StatusUnauthorized)
-		return
-	}
-
-	shopUUID, err := uuid.Parse(uuidStr)
+	ctx := r.Context()
+	shopUUID, err := uuid.Parse(chi.URLParam(r, "uuid"))
 	if err != nil {
 		http.Error(w, "Format d'identifiant invalide", http.StatusBadRequest)
 		return
 	}
 
+	ownerID, ok := ctx.Value(ctxkeys.OwnerIDKey).(int)
+	if !ok {
+		http.Error(w, "Utilisateur non identifié", http.StatusUnauthorized)
+		return
+	}
+
+	var req shopRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Json invalide", http.StatusBadRequest)
 		return
@@ -296,44 +257,39 @@ func (h *ShopHandler) UpdateShopByUUIDHandler(w http.ResponseWriter, r *http.Req
 		OwnerID:     ownerID,
 	}
 
-	shop, err := h.shopService.UpdateShop(shopUUID, ownerID, shopUpdate)
+	shop, err := h.shopService.UpdateShop(ctx, shopUUID, ownerID, shopUpdate)
 	if err != nil {
-		code := errs.MapHTTPError(err)
-		http.Error(w, "Mise à jour impossible: "+err.Error(), code)
+		http.Error(w, errs.SafeMessage(err, errs.MapHTTPError(err)), errs.MapHTTPError(err))
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(shop)
 }
 
 // DeleteShopByUUIDHandler godoc
-// @Summary      Supprimer un magasin
-// @Description  Suppression logique (soft delete) d'un magasin
+// @Summary      Supprimer un magasin (soft delete)
 // @Tags         Shops
-// @Param        uuid   path      string  true  "UUID du magasin"
+// @Param        uuid  path  string  true  "UUID du magasin"
 // @Security     BearerAuth
 // @Success      204  "No Content"
-// @Failure      404  {string}  string "Echec de suppression"
 // @Router       /shops/{uuid} [delete]
 func (h *ShopHandler) DeleteShopByUUIDHandler(w http.ResponseWriter, r *http.Request) {
-	uuidStr := chi.URLParam(r, "uuid")
-	ownerID, ok := r.Context().Value(ctxkeys.OwnerIDKey).(int)
-	if !ok {
-		http.Error(w, "Utilisateur non identifié", http.StatusUnauthorized)
-		return
-	}
-
-	shopUUID, err := uuid.Parse(uuidStr)
+	ctx := r.Context()
+	shopUUID, err := uuid.Parse(chi.URLParam(r, "uuid"))
 	if err != nil {
 		http.Error(w, "Format d'identifiant invalide", http.StatusBadRequest)
 		return
 	}
 
-	if err := h.shopService.DeleteShop(shopUUID, ownerID); err != nil {
-		code := errs.MapHTTPError(err)
-		http.Error(w, "Echec de suppression: "+err.Error(), code)
+	ownerID, ok := ctx.Value(ctxkeys.OwnerIDKey).(int)
+	if !ok {
+		http.Error(w, "Utilisateur non identifié", http.StatusUnauthorized)
+		return
+	}
+
+	if err := h.shopService.DeleteShop(ctx, shopUUID, ownerID); err != nil {
+		http.Error(w, errs.SafeMessage(err, errs.MapHTTPError(err)), errs.MapHTTPError(err))
 		return
 	}
 
@@ -342,36 +298,31 @@ func (h *ShopHandler) DeleteShopByUUIDHandler(w http.ResponseWriter, r *http.Req
 
 // RestoreShopByUUIDHandler godoc
 // @Summary      Restaurer un magasin
-// @Description  Réactive un magasin supprimé
 // @Tags         Shops
-// @Accept       json
-// @Produce      json
-// @Param        uuid   path      string  true  "UUID du magasin"
+// @Param        uuid  path  string  true  "UUID du magasin"
 // @Security     BearerAuth
-// @Success      200  {object}  map[string]string "message: Magasin restauré avec succès"
-// @Failure      404  {string}  string "Erreur lors du restore"
+// @Success      200  {object}  map[string]string
 // @Router       /shops/{uuid} [patch]
 func (h *ShopHandler) RestoreShopByUUIDHandler(w http.ResponseWriter, r *http.Request) {
-	uuidStr := chi.URLParam(r, "uuid")
-	shopUUID, err := uuid.Parse(uuidStr)
+	ctx := r.Context()
+	shopUUID, err := uuid.Parse(chi.URLParam(r, "uuid"))
 	if err != nil {
 		http.Error(w, "Format d'identifiant invalide", http.StatusBadRequest)
 		return
 	}
 
-	ownerID, ok := r.Context().Value(ctxkeys.OwnerIDKey).(int)
+	ownerID, ok := ctx.Value(ctxkeys.OwnerIDKey).(int)
 	if !ok {
 		http.Error(w, "Utilisateur non identifié", http.StatusUnauthorized)
 		return
 	}
 
-	if err := h.shopService.RestoreShop(shopUUID, ownerID); err != nil {
-		code := errs.MapHTTPError(err)
-		http.Error(w, "Erreur lors du restore: "+err.Error(), code)
+	if err := h.shopService.RestoreShop(ctx, shopUUID, ownerID); err != nil {
+		http.Error(w, errs.SafeMessage(err, errs.MapHTTPError(err)), errs.MapHTTPError(err))
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Magasin restauré avec succès"})
 }
 

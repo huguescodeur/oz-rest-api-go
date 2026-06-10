@@ -1,0 +1,3 @@
+- reniatialiser le password en envoyant un lien qui expire par mail a cliquer pour saisir un nouveau mot de passe je ne sais pas si avec mailjet ou autre
+
+- upload fichier type excel dans un format afin d'ajout des produit, des categorie, des stocks si on ne souhaite pas inserer manuellement du fait que peut etre ces assez ce qu'il y'a a entrer et derriere le systeme insere automatiquement en verifiant bien si la structure est correcte et toutes les donnees rempli et correct sonts les valeurs pour etre inserer correctement sinon aucune insertion et retourner une erreur precises pour corriger

@@ -18,6 +18,8 @@ type User struct {
 	PasswordHash   string     `json:"-"`
 	Role           string     `json:"role" validate:"required"`
 	ProfilePicture string     `json:"profilePicture"`
+	ShopID         *int       `json:"shop_id,omitempty"`
+	ShopName       string     `json:"shop_name,omitempty"`
 	CreatedAt      time.Time  `json:"createdAt"`
 	UpdatedAt      time.Time  `json:"updatedAt"`
 	DeletedAt      *time.Time `json:"deletedAt"`

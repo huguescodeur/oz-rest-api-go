@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"errors"
 
 	"github.com/google/uuid"
@@ -13,47 +14,29 @@ type ProductService struct {
 }
 
 func NewProductService(s store.ProductStore) *ProductService {
-	return &ProductService{
-		productStore: s,
-	}
+	return &ProductService{productStore: s}
 }
 
-func (p *ProductService) GetAllProducts(ownerID int) ([]*models.Product, error) {
-	products, err := p.productStore.GetAll(ownerID)
-	if err != nil {
-		return nil, err
-	}
-
-	return products, nil
+func (p *ProductService) GetAllProducts(ctx context.Context, ownerID, limit, offset int) ([]*models.Product, int, error) {
+	return p.productStore.GetAll(ctx, ownerID, limit, offset)
 }
 
-func (p *ProductService) GetProductByUUID(uuid uuid.UUID, ownerID int) (*models.Product, error) {
-	product, err := p.productStore.GetByUUID(uuid, ownerID)
-	if err != nil {
-		return nil, err
-	}
-
-	return product, nil
+func (p *ProductService) GetProductByUUID(ctx context.Context, uuid uuid.UUID, ownerID int) (*models.Product, error) {
+	return p.productStore.GetByUUID(ctx, uuid, ownerID)
 }
 
-func (p *ProductService) CreateProduct(model *models.Product) (*models.Product, error) {
+func (p *ProductService) CreateProduct(ctx context.Context, model *models.Product) (*models.Product, error) {
 	if model.ProductUUID == uuid.Nil {
 		model.ProductUUID = uuid.New()
 	}
 	if model.UnitPrice < 0 {
 		return nil, errors.New("le prix ne peut pas être négatif")
 	}
-
-	createdProduct, err := p.productStore.Create(model)
-	if err != nil {
-		return nil, err
-	}
-
-	return createdProduct, nil
+	return p.productStore.Create(ctx, model)
 }
 
-func (p *ProductService) UpdateProduct(uuid uuid.UUID, ownerID int, product *models.Product) (*models.Product, error) {
-	currentProduct, err := p.productStore.GetByUUID(uuid, ownerID)
+func (p *ProductService) UpdateProduct(ctx context.Context, uuid uuid.UUID, ownerID int, product *models.Product) (*models.Product, error) {
+	currentProduct, err := p.productStore.GetByUUID(ctx, uuid, ownerID)
 	if err != nil {
 		return nil, err
 	}
@@ -71,24 +54,13 @@ func (p *ProductService) UpdateProduct(uuid uuid.UUID, ownerID int, product *mod
 		currentProduct.ProductName = product.ProductName
 	}
 
-	productUpdated, err := p.productStore.Update(uuid, currentProduct)
-	if err != nil {
-		return nil, err
-	}
-
-	return productUpdated, nil
+	return p.productStore.Update(ctx, uuid, currentProduct)
 }
-func (p *ProductService) DeleteProduct(uuid uuid.UUID, ownerID int) error {
-	if err := p.productStore.Delete(uuid, ownerID); err != nil {
-		return err
-	}
 
-	return nil
+func (p *ProductService) DeleteProduct(ctx context.Context, uuid uuid.UUID, ownerID int) error {
+	return p.productStore.Delete(ctx, uuid, ownerID)
 }
-func (p *ProductService) RestoreProduct(uuid uuid.UUID, ownerID int) error {
-	if err := p.productStore.Restore(uuid, ownerID); err != nil {
-		return err
-	}
 
-	return nil
+func (p *ProductService) RestoreProduct(ctx context.Context, uuid uuid.UUID, ownerID int) error {
+	return p.productStore.Restore(ctx, uuid, ownerID)
 }

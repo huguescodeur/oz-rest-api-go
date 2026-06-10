@@ -11,6 +11,17 @@ import (
 	"github.com/huguescodeur/oz-rest-api-go/internal/pkg/ctxkeys"
 )
 
+func SuperOnly(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		role, _ := r.Context().Value(ctxkeys.UserRoleKey).(string)
+		if role != "super" {
+			http.Error(w, "Accès réservé au super administrateur", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 

@@ -9,14 +9,16 @@ import (
 	httpSwagger "github.com/swaggo/http-swagger"
 )
 
+
+
 func (a *App) Routes() chi.Router {
 	r := chi.NewRouter()
 
-	r.Use(middleware.Logger)
+	r.Use(middlewares.Logger)
 	r.Use(middleware.Recoverer)
 
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins: []string{"http://localhost:5173", "http://127.0.0.1:5173", "https://ee5b-74-244-119-50.ngrok-free.app"},
+		AllowedOrigins: []string{"http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174", "https://ee5b-74-244-119-50.ngrok-free.app"},
 
 		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
 
@@ -33,7 +35,10 @@ func (a *App) Routes() chi.Router {
 	r.Route("/api", func(r chi.Router) {
 
 		r.Route("/v1", func(r chi.Router) {
-			r.Mount("/auth", a.AuthHandler.AuthRoutes())
+			r.Group(func(r chi.Router) {
+				r.Use(middlewares.RateLimiter)
+				r.Mount("/auth", a.AuthHandler.AuthRoutes())
+			})
 
 			r.Group(func(r chi.Router) {
 				r.Use(middlewares.AuthMiddleware)
@@ -43,6 +48,14 @@ func (a *App) Routes() chi.Router {
 				r.Mount("/shops", a.ShopHandler.ShopRoutes())
 				r.Mount("/stocks", a.StockHandler.StockRoutes())
 				r.Mount("/orders", a.OrderHandler.OrderRoutes())
+				r.Mount("/categories", a.CategoryHandler.CategoryRoutes())
+				r.Mount("/dashboard", a.DashboardHandler.DashboardRoutes())
+				r.Get("/logs", a.StockHandler.GetLogsHandler)
+
+				r.Group(func(r chi.Router) {
+					r.Use(middlewares.SuperOnly)
+					r.Mount("/super", a.SuperHandler.SuperRoutes())
+				})
 			})
 
 		})

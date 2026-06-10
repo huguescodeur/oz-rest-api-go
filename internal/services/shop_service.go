@@ -1,6 +1,8 @@
 package services
 
 import (
+	"context"
+
 	"github.com/google/uuid"
 	"github.com/huguescodeur/oz-rest-api-go/internal/models"
 	"github.com/huguescodeur/oz-rest-api-go/internal/pkg/errs"
@@ -12,74 +14,51 @@ type ShopService struct {
 }
 
 func NewShopService(s store.ShopStore) *ShopService {
-	return &ShopService{
-		shopStore: s,
-	}
+	return &ShopService{shopStore: s}
 }
 
-func (s *ShopService) GetAllShops(ownerID int) ([]*models.Shop, error) {
-	shops, err := s.shopStore.GetAll(ownerID)
-	if err != nil {
-		return nil, err
-	}
-
-	return shops, nil
-}
-func (s *ShopService) GetAllShopsVendeur(vendeurID int) ([]*models.Shop, error) {
-	shops, err := s.shopStore.GetAll(vendeurID)
-	if err != nil {
-		return nil, err
-	}
-
-	return shops, nil
+func (s *ShopService) GetAllShops(ctx context.Context, ownerID, limit, offset int) ([]*models.Shop, int, error) {
+	return s.shopStore.GetAll(ctx, ownerID, limit, offset)
 }
 
-func (s *ShopService) GetShopByUUID(uuid uuid.UUID, ownerID int) (*models.Shop, error) {
-	shop, err := s.shopStore.GetByUUID(uuid, ownerID)
-	if err != nil {
-		return nil, err
-	}
-
-	return shop, nil
+func (s *ShopService) GetAllShopsVendeur(ctx context.Context, vendeurID int) ([]*models.Shop, error) {
+	return s.shopStore.GetAllShopVendeur(ctx, vendeurID)
 }
-func (s *ShopService) CreateShop(model *models.Shop) (*models.Shop, error) {
+
+func (s *ShopService) GetShopByUUID(ctx context.Context, uuid uuid.UUID, ownerID int) (*models.Shop, error) {
+	return s.shopStore.GetByUUID(ctx, uuid, ownerID)
+}
+
+func (s *ShopService) CreateShop(ctx context.Context, model *models.Shop) (*models.Shop, error) {
 	if model.ShopUUID == uuid.Nil {
 		model.ShopUUID = uuid.New()
 	}
-
-	shop, err := s.shopStore.Create(model)
-	if err != nil {
-		return nil, err
-	}
-
-	return shop, nil
+	return s.shopStore.Create(ctx, model)
 }
 
-func (s *ShopService) AssignVendeurToShops(vendeurID int, shopIDs []int, ownerID int, ownerRole string) error {
+func (s *ShopService) AssignVendeurToShops(ctx context.Context, vendeurID int, shopIDs []int, ownerID int, ownerRole string) error {
 	if ownerRole != "super" {
-		isChild, err := s.shopStore.IsChildOf(vendeurID, ownerID)
+		isChild, err := s.shopStore.IsChildOf(ctx, vendeurID, ownerID)
 		if err != nil {
 			return err
 		}
 		if !isChild {
-
 			return errs.ErrUnauthorized
 		}
 
-		belongs, err := s.shopStore.DoShopsBelongToOwner(shopIDs, ownerID)
+		belongs, err := s.shopStore.DoShopsBelongToOwner(ctx, shopIDs, ownerID)
 		if err != nil {
 			return err
 		}
 		if !belongs {
-
 			return errs.ErrUnauthorized
 		}
 	}
-	return s.shopStore.AssignVendeurToShops(vendeurID, shopIDs)
+	return s.shopStore.AssignVendeurToShops(ctx, vendeurID, shopIDs)
 }
 
-func (s *ShopService) UpdateShop(uuid uuid.UUID, ownerID int, shop *models.Shop) (*models.Shop, error) {
-	currentShop, err := s.shopStore.GetByUUID(uuid, ownerID)
+func (s *ShopService) UpdateShop(ctx context.Context, uuid uuid.UUID, ownerID int, shop *models.Shop) (*models.Shop, error) {
+	currentShop, err := s.shopStore.GetByUUID(ctx, uuid, ownerID)
 	if err != nil {
 		return nil, err
 	}
@@ -97,25 +76,13 @@ func (s *ShopService) UpdateShop(uuid uuid.UUID, ownerID int, shop *models.Shop)
 		currentShop.ShopMail = shop.ShopMail
 	}
 
-	updatedShop, err := s.shopStore.Update(currentShop)
-	if err != nil {
-		return nil, err
-	}
-
-	return updatedShop, nil
-}
-func (s *ShopService) DeleteShop(uuid uuid.UUID, ownerID int) error {
-	if err := s.shopStore.Delete(uuid, ownerID); err != nil {
-		return err
-	}
-
-	return nil
+	return s.shopStore.Update(ctx, currentShop)
 }
 
-func (s *ShopService) RestoreShop(uuid uuid.UUID, ownerID int) error {
-	if err := s.shopStore.Restore(uuid, ownerID); err != nil {
-		return err
-	}
+func (s *ShopService) DeleteShop(ctx context.Context, uuid uuid.UUID, ownerID int) error {
+	return s.shopStore.Delete(ctx, uuid, ownerID)
+}
 
-	return nil
+func (s *ShopService) RestoreShop(ctx context.Context, uuid uuid.UUID, ownerID int) error {
+	return s.shopStore.Restore(ctx, uuid, ownerID)
 }

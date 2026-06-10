@@ -22,55 +22,48 @@ type UserHandler struct {
 }
 
 func NewUserHandler(s *services.UserService) *UserHandler {
-	return &UserHandler{
-		userService: s,
-		validate:    validator.New(),
-	}
+	return &UserHandler{userService: s, validate: validator.New()}
 }
 
 type UpdateUserRequest struct {
-	Username  *string `json:"username,omitempty" example:"nouveau_pseudo"`
-	Firstname *string `json:"firstname,omitempty" example:"Prince"`
-	Lastname  *string `json:"lastname,omitempty" example:"Konan"`
-	Phone     *string `json:"phone,omitempty" example:"0102030405"`
-	Email     *string `json:"email,omitempty" example:"nouveau@email.com"`
-	Role      *string `json:"role" validate:"required,oneof=admin vendeur" example:"vendeur"`
-	ParentID  *int    `json:"parentId,omitempty" `
+	Username  *string `json:"username,omitempty"`
+	Firstname *string `json:"firstname,omitempty"`
+	Lastname  *string `json:"lastname,omitempty"`
+	Phone     *string `json:"phone,omitempty"`
+	Email     *string `json:"email,omitempty"`
+	Role      *string `json:"role" validate:"required,oneof=admin vendeur"`
+	ParentID  *int    `json:"parentId,omitempty"`
+	ShopID    *int    `json:"shop_id,omitempty"`
 }
 
 // GetAllUsersHandler godoc
 // @Summary      Liste paginée des utilisateurs
-// @Param        page   query      int  false  "Numéro de la page (défaut: 1)"
-// @Param        limit  query      int  false  "Nombre d'éléments (défaut: 10)"
+// @Param        page   query  int  false  "Numéro de la page (défaut: 1)"
+// @Param        limit  query  int  false  "Nombre d'éléments (défaut: 10)"
+// @Security     BearerAuth
 // @Router       /users [get]
 func (h *UserHandler) GetAllUsersHandler(w http.ResponseWriter, r *http.Request) {
-	// 1. Récupération des paramètres avec valeurs par défaut
-	pageStr := r.URL.Query().Get("page")
-	limitStr := r.URL.Query().Get("limit")
-
-	page, _ := strconv.Atoi(pageStr)
+	ctx := r.Context()
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	if page < 1 {
 		page = 1
 	}
-
-	limit, _ := strconv.Atoi(limitStr)
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit < 1 {
 		limit = 10
 	}
-
-	// Calcul de l'offset (ex: page 2, limit 10 -> on saute les 10 premiers)
 	offset := (page - 1) * limit
 
-	ownerID, _ := r.Context().Value(ctxkeys.OwnerIDKey).(int)
-	ownerRole, _ := r.Context().Value(ctxkeys.UserRoleKey).(string)
+	ownerID, _ := ctx.Value(ctxkeys.OwnerIDKey).(int)
+	ownerRole, _ := ctx.Value(ctxkeys.UserRoleKey).(string)
+	showArchived := r.URL.Query().Get("archived") == "true"
 
-	users, total, err := h.userService.GetAllUser(ownerID, ownerRole, limit, offset)
+	users, total, err := h.userService.GetAllUser(ctx, ownerID, ownerRole, limit, offset, showArchived)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
 
-	// 2. Réponse enrichie pour le Front-end
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
 		"users":       users,
@@ -82,37 +75,31 @@ func (h *UserHandler) GetAllUsersHandler(w http.ResponseWriter, r *http.Request)
 }
 
 // AddUserHandler godoc
-// @Summary      Créer un nouvel utilisateur (Admin/Vendeur)
-// @Description  Permet à un Admin ou Super Admin de créer un utilisateur.
-// @Description  Si l'auteur est Admin, le rôle est forcé à 'vendeur' et lié à son ID.
-// @Description  Si l'auteur est Super Admin, il peut définir le rôle.
+// @Summary      Créer un nouvel utilisateur
 // @Tags         Users
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        user  body      models.User  true  "Données de l'utilisateur à créer (email, username, password, firstname, lastname, phone)"
-// @Success      201   {object}  map[string]interface{} "Ex: {message: '...', user: {models.User}}"
-// @Failure      400   {string}  string "Données JSON invalides ou erreur de validation"
-// @Failure      403   {string}  string "Accès refusé : privilèges insuffisants"
-// @Failure      500   {string}  string "Erreur interne du serveur"
+// @Param        user  body      models.User  true  "Données de l'utilisateur"
+// @Success      201   {object}  map[string]interface{}
 // @Router       /users [post]
 func (h *UserHandler) AddUserHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	var newUser models.User
-
 	if err := json.NewDecoder(r.Body).Decode(&newUser); err != nil {
 		http.Error(w, "Données JSON invalides", http.StatusBadRequest)
 		return
 	}
 
-	ownerID, _ := r.Context().Value(ctxkeys.OwnerIDKey).(int)
-	ownerRole, _ := r.Context().Value(ctxkeys.UserRoleKey).(string)
+	ownerID, _ := ctx.Value(ctxkeys.OwnerIDKey).(int)
+	ownerRole, _ := ctx.Value(ctxkeys.UserRoleKey).(string)
 
 	if err := h.validate.Struct(newUser); err != nil {
 		responses.SendValidationError(w, err)
 		return
 	}
 
-	user, err := h.userService.CreateUser(&newUser, ownerID, ownerRole)
+	user, err := h.userService.CreateUser(ctx, &newUser, ownerID, ownerRole)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
@@ -120,155 +107,114 @@ func (h *UserHandler) AddUserHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message": "Utilisateur créé avec succès",
-		"user":    user,
-	})
+	json.NewEncoder(w).Encode(map[string]interface{}{"message": "Utilisateur créé avec succès", "user": user})
 }
-
-// ? Start base Get All
-// GetAllUsersHandler godoc
-// @Summary      Liste tous les utilisateurs
-// @Description  Retourne la liste des utilisateurs. Si le rôle est 'super', tout est listé. Sinon, seulement les enfants de l'owner.
-// @Tags         users
-// @Accept       json
-// @Produce      json
-// @Security     BearerAuth
-// @Success      200  {object}  map[string]interface{} "Ex: {count: 1, users: []}"
-// @Failure      403  {string}  string "Interdit"
-// @Router       /users [get]
-// func (h *UserHandler) GetAllUsersHandler(w http.ResponseWriter, r *http.Request) {
-// 	ownerID, _ := r.Context().Value(ctxkeys.OwnerIDKey).(int)
-// 	ownerRole, _ := r.Context().Value(ctxkeys.UserRoleKey).(string)
-
-// 	users, err := h.userService.GetAllUser(ownerID, ownerRole)
-// 	if err != nil {
-// 		http.Error(w, err.Error(), http.StatusForbidden)
-// 		return
-// 	}
-
-// 	w.Header().Set("Content-Type", "application/json")
-// 	json.NewEncoder(w).Encode(map[string]any{
-// 		"count": len(users),
-// 		"users": users,
-// 	})
-// }
-// ? End base Get All
 
 // GetUserByUUIDHandler godoc
 // @Summary      Récupère un utilisateur
-// @Description  Récupère les détails d'un utilisateur par son UUID.
 // @Tags         users
-// @Accept       json
-// @Produce      json
-// @Param        uuid   path      string  true  "User UUID"
+// @Param        uuid  path  string  true  "User UUID"
 // @Security     BearerAuth
 // @Success      200  {object}  models.User
-// @Failure      400  {string}  string "Format d'identifiant invalide"
-// @Failure      404  {string}  string "Aucun utilisateur trouvé"
 // @Router       /users/{uuid} [get]
 func (h *UserHandler) GetUserByUUIDHandler(w http.ResponseWriter, r *http.Request) {
-	uuidStr := chi.URLParam(r, "uuid")
-
-	userUUID, err := uuid.Parse(uuidStr)
+	ctx := r.Context()
+	userUUID, err := uuid.Parse(chi.URLParam(r, "uuid"))
 	if err != nil {
 		http.Error(w, "Format d'identifiant invalide", http.StatusBadRequest)
 		return
 	}
 
-	ownerID, _ := r.Context().Value(ctxkeys.OwnerIDKey).(int)
-	ownerRole, _ := r.Context().Value(ctxkeys.UserRoleKey).(string)
+	ownerID, _ := ctx.Value(ctxkeys.OwnerIDKey).(int)
+	ownerRole, _ := ctx.Value(ctxkeys.UserRoleKey).(string)
 
-	user, err := h.userService.GetUserByUUID(userUUID, ownerID, ownerRole)
+	user, err := h.userService.GetUserByUUID(ctx, userUUID, ownerID, ownerRole)
 	if err != nil {
 		http.Error(w, "Aucun utilisateur trouvé: "+err.Error(), http.StatusNotFound)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(user); err != nil {
-		http.Error(w, "Json invalide", http.StatusInternalServerError)
-		return
-	}
+	json.NewEncoder(w).Encode(user)
 }
 
 // UpdateUserByUUIDHandler godoc
 // @Summary      Met à jour un utilisateur
-// @Description  Met à jour les informations. Seul 'super' peut changer le rôle ou le parent.
 // @Tags         users
-// @Accept       json
-// @Produce      json
-// @Param        uuid   path      string       true  "User UUID"
-// @Param        user   body      UpdateUserRequest  true  "Update User"
+// @Param        uuid  path  string            true  "User UUID"
+// @Param        user  body  UpdateUserRequest  true  "Update User"
 // @Security     BearerAuth
 // @Success      200  {object}  models.User
-// @Failure      400  {string}  string "Données invalides"
-// @Failure      403  {string}  string "Erreur de permission"
 // @Router       /users/{uuid} [put]
 func (h *UserHandler) UpdateUserByUUIDHandler(w http.ResponseWriter, r *http.Request) {
-	var req UpdateUserRequest
-	uuidStr := chi.URLParam(r, "uuid")
-	userUUID, err := uuid.Parse(uuidStr)
+	ctx := r.Context()
+	userUUID, err := uuid.Parse(chi.URLParam(r, "uuid"))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	var req UpdateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Données JSON invalides", http.StatusBadRequest)
 		return
 	}
 
-	// fmt.Printf("Data Req: %+v\n", req)
-	// fmt.Printf("Data Req: %+v", req)
-
-	updateUser := &models.User{
-		Username:  *req.Username,
-		Email:     *req.Email,
-		Firstname: *req.Firstname,
-		Lastname:  *req.Lastname,
-		Phone:     *req.Phone,
-		Role:      *req.Role,
-		ParentID:  req.ParentID,
+	updateUser := &models.User{}
+	if req.Username != nil {
+		updateUser.Username = *req.Username
 	}
+	if req.Email != nil {
+		updateUser.Email = *req.Email
+	}
+	if req.Firstname != nil {
+		updateUser.Firstname = *req.Firstname
+	}
+	if req.Lastname != nil {
+		updateUser.Lastname = *req.Lastname
+	}
+	if req.Phone != nil {
+		updateUser.Phone = *req.Phone
+	}
+	if req.Role != nil {
+		updateUser.Role = *req.Role
+	}
+	updateUser.ParentID = req.ParentID
+	updateUser.ShopID = req.ShopID
 
-	ownerID, _ := r.Context().Value(ctxkeys.OwnerIDKey).(int)
-	ownerRole, _ := r.Context().Value(ctxkeys.UserRoleKey).(string)
+	ownerID, _ := ctx.Value(ctxkeys.OwnerIDKey).(int)
+	ownerRole, _ := ctx.Value(ctxkeys.UserRoleKey).(string)
 
-	user, err := h.userService.UpdateUser(userUUID, updateUser, ownerID, ownerRole)
+	user, err := h.userService.UpdateUser(ctx, userUUID, updateUser, ownerID, ownerRole)
 	if err != nil {
 		http.Error(w, "Erreur lors de la mise à jour : "+err.Error(), http.StatusForbidden)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(user)
 }
 
 // DeleteUserByUUIDHandler godoc
 // @Summary      Supprime un utilisateur
 // @Tags         users
-// @Param        uuid   path      string  true  "User UUID"
+// @Param        uuid  path  string  true  "User UUID"
 // @Security     BearerAuth
 // @Success      204  "No Content"
-// @Failure      404  {string}  string "Not Found"
 // @Router       /users/{uuid} [delete]
 func (h *UserHandler) DeleteUserByUUIDHandler(w http.ResponseWriter, r *http.Request) {
-	uuidStr := chi.URLParam(r, "uuid")
-	userUUID, err := uuid.Parse(uuidStr)
+	ctx := r.Context()
+	userUUID, err := uuid.Parse(chi.URLParam(r, "uuid"))
 	if err != nil {
 		http.Error(w, "Format d'identifiant invalide", http.StatusBadRequest)
 		return
 	}
 
-	ownerID, _ := r.Context().Value(ctxkeys.OwnerIDKey).(int)
-	ownerRole, _ := r.Context().Value(ctxkeys.UserRoleKey).(string)
+	ownerID, _ := ctx.Value(ctxkeys.OwnerIDKey).(int)
+	ownerRole, _ := ctx.Value(ctxkeys.UserRoleKey).(string)
 
-	if err := h.userService.DeleteUser(userUUID, ownerID, ownerRole); err != nil {
-		code := errs.MapHTTPError(err)
-		http.Error(w, "Echec de suppression: "+err.Error(), code)
+	if err := h.userService.DeleteUser(ctx, userUUID, ownerID, ownerRole); err != nil {
+		http.Error(w, "Echec de suppression: "+err.Error(), errs.MapHTTPError(err))
 		return
 	}
 
@@ -278,34 +224,101 @@ func (h *UserHandler) DeleteUserByUUIDHandler(w http.ResponseWriter, r *http.Req
 // RestoreUserByUUIDHandler godoc
 // @Summary      Restaure un utilisateur
 // @Tags         users
-// @Param        uuid   path      string  true  "User UUID"
+// @Param        uuid  path  string  true  "User UUID"
 // @Security     BearerAuth
-// @Success      200  {object}  map[string]string "message: Utilisateur restauré"
+// @Success      200  {object}  map[string]string
 // @Router       /users/{uuid} [patch]
 func (h *UserHandler) RestoreUserByUUIDHandler(w http.ResponseWriter, r *http.Request) {
-	uuidStr := chi.URLParam(r, "uuid")
-	userUUID, err := uuid.Parse(uuidStr)
+	ctx := r.Context()
+	userUUID, err := uuid.Parse(chi.URLParam(r, "uuid"))
 	if err != nil {
 		http.Error(w, "Format d'identifiant invalide", http.StatusBadRequest)
 		return
 	}
 
-	ownerID, _ := r.Context().Value(ctxkeys.OwnerIDKey).(int)
-	ownerRole, _ := r.Context().Value(ctxkeys.UserRoleKey).(string)
+	ownerID, _ := ctx.Value(ctxkeys.OwnerIDKey).(int)
+	ownerRole, _ := ctx.Value(ctxkeys.UserRoleKey).(string)
 
-	if err := h.userService.RestoreUser(userUUID, ownerID, ownerRole); err != nil {
-		code := errs.MapHTTPError(err)
-		http.Error(w, "Erreur lors du restore: "+err.Error(), code)
+	if err := h.userService.RestoreUser(ctx, userUUID, ownerID, ownerRole); err != nil {
+		http.Error(w, "Erreur lors du restore: "+err.Error(), errs.MapHTTPError(err))
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Utilisateur restauré avec succès"})
+}
+
+func (h *UserHandler) GetMyShopsHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID, _ := ctx.Value(ctxkeys.UserIDKey).(int)
+
+	shops, err := h.userService.GetMyShops(ctx, userID)
+	if err != nil {
+		http.Error(w, "Erreur lors de la récupération des boutiques", http.StatusInternalServerError)
+		return
+	}
+	if shops == nil {
+		shops = []*models.Shop{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"shops": shops})
+}
+
+func (h *UserHandler) GetUserShopsHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ownerID, _ := ctx.Value(ctxkeys.OwnerIDKey).(int)
+
+	userUUID, err := uuid.Parse(chi.URLParam(r, "uuid"))
+	if err != nil {
+		http.Error(w, "UUID invalide", http.StatusBadRequest)
+		return
+	}
+
+	shops, err := h.userService.GetUserShops(ctx, userUUID, ownerID)
+	if err != nil {
+		http.Error(w, errs.SafeMessage(err, errs.MapHTTPError(err)), errs.MapHTTPError(err))
+		return
+	}
+	if shops == nil {
+		shops = []*models.Shop{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"shops": shops})
+}
+
+func (h *UserHandler) AssignShopsHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ownerID, _ := ctx.Value(ctxkeys.OwnerIDKey).(int)
+
+	userUUID, err := uuid.Parse(chi.URLParam(r, "uuid"))
+	if err != nil {
+		http.Error(w, "UUID invalide", http.StatusBadRequest)
+		return
+	}
+
+	var body struct {
+		ShopIDs []int `json:"shop_ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "JSON invalide", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.userService.AssignShops(ctx, userUUID, ownerID, body.ShopIDs); err != nil {
+		http.Error(w, errs.SafeMessage(err, errs.MapHTTPError(err)), errs.MapHTTPError(err))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Boutiques mises à jour"})
 }
 
 func (h *UserHandler) UserRoutes() chi.Router {
 	r := chi.NewRouter()
 
+	r.Get("/me/shops", h.GetMyShopsHandler)
 	r.Get("/", h.GetAllUsersHandler)
 	r.Post("/", h.AddUserHandler)
 
@@ -314,6 +327,8 @@ func (h *UserHandler) UserRoutes() chi.Router {
 		r.Put("/", h.UpdateUserByUUIDHandler)
 		r.Delete("/", h.DeleteUserByUUIDHandler)
 		r.Patch("/", h.RestoreUserByUUIDHandler)
+		r.Get("/shops", h.GetUserShopsHandler)
+		r.Put("/shops", h.AssignShopsHandler)
 	})
 
 	return r

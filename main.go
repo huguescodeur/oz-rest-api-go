@@ -1,15 +1,20 @@
 package main
 
 import (
-	"database/sql"
+	"context"
+	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-	"github.com/go-sql-driver/mysql"
 	"github.com/huguescodeur/oz-rest-api-go/internal/app"
 	"github.com/huguescodeur/oz-rest-api-go/internal/pkg/config"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // @title           o'z api
@@ -30,34 +35,59 @@ import (
 func main() {
 	config.LoadConfig()
 
-	// ? Connection MySQL
-	cfg := mysql.Config{
-		User:                 os.Getenv("DB_USER"),
-		Passwd:               os.Getenv("DB_PASS"),
-		Net:                  "tcp",
-		Addr:                 os.Getenv("DB_ADDR"),
-		DBName:               os.Getenv("DB_NAME"),
-		AllowNativePasswords: true,
-		ParseTime:            true,
+	ctx := context.Background()
+
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		dsn = fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable",
+			os.Getenv("DB_USER"),
+			os.Getenv("DB_PASS"),
+			os.Getenv("DB_ADDR"),
+			os.Getenv("DB_NAME"),
+		)
 	}
 
-	db, err := sql.Open("mysql", cfg.FormatDSN())
+	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("impossible de créer le pool de connexions: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		log.Fatalf("impossible de joindre la base de données: %v", err)
 	}
 
-	defer db.Close()
+	myApp := app.Init(pool)
 
-	if err := db.Ping(); err != nil {
-		log.Fatal(err)
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
 	}
 
-	// ? Initialisons notre App
-	myApp := app.Init(db)
+	srv := &http.Server{
+		Addr:         ":" + port,
+		Handler:      myApp.Routes(),
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
 
-	// ? Démarrer et écouter le serveur
-	fmt.Println("Server start http://localhost:8080")
+	go func() {
+		slog.Info("Server start", "addr", "http://localhost:8080")
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("server error: %v", err)
+		}
+	}()
 
-	http.ListenAndServe(":8080", myApp.Routes())
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
 
+	slog.Info("Arrêt du serveur...")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Fatalf("arrêt forcé: %v", err)
+	}
+	slog.Info("Serveur arrêté proprement")
 }
