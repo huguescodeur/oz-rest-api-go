@@ -143,15 +143,21 @@ func (s *AuthService) ForgotPassword(ctx context.Context, identifier string) err
 	token := hex.EncodeToString(raw)
 	expiresAt := time.Now().Add(15 * time.Minute)
 
+	fmt.Printf("[AUTH] ForgotPassword: user trouvé id=%d email=%s\n", user.ID, user.Email)
 	if err := s.authStore.CreateResetToken(ctx, user.ID, token, expiresAt); err != nil {
+		fmt.Printf("[AUTH] CreateResetToken erreur: %v\n", err)
 		return fmt.Errorf("création token: %w", err)
 	}
+	fmt.Printf("[AUTH] Token créé, lancement goroutine envoi email\n")
 
 	resetLink := fmt.Sprintf("%s/reset-password?token=%s", s.frontendURL, token)
 	fullName := user.Firstname + " " + user.Lastname
 	go func() {
+		fmt.Printf("[AUTH] Goroutine démarrée, envoi à %s\n", user.Email)
 		if err := s.mailer.SendPasswordReset(user.Email, fullName, resetLink); err != nil {
 			fmt.Printf("[AUTH] Erreur envoi email reset à %s: %v\n", user.Email, err)
+		} else {
+			fmt.Printf("[AUTH] Email reset envoyé avec succès à %s\n", user.Email)
 		}
 	}()
 	return nil
