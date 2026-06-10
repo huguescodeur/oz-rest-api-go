@@ -14,11 +14,14 @@ import (
 const mailjetURL = "https://api.mailjet.com/v3.1/send"
 
 type Mailer struct {
-	// SMTP config (prioritaire sur Mailjet)
+	// SMTP config (prioritaire — pour le dev local)
 	smtpHost string
 	smtpPort string
 	smtpUser string
 	smtpPass string
+
+	// Resend config (pour la prod — API HTTP, pas de port bloqué)
+	resendKey string
 
 	// Mailjet config (fallback)
 	apiKey    string
@@ -44,6 +47,7 @@ func New() *Mailer {
 		smtpPort:  os.Getenv("SMTP_PORT"),
 		smtpUser:  smtpUser,
 		smtpPass:  os.Getenv("SMTP_PASS"),
+		resendKey: os.Getenv("RESEND_API_KEY"),
 		apiKey:    os.Getenv("MAILJET_API_KEY"),
 		secretKey: os.Getenv("MAILJET_SECRET_KEY"),
 		fromEmail: from,
@@ -56,13 +60,16 @@ func (m *Mailer) smtpEnabled() bool {
 	return m.smtpHost != "" && m.smtpUser != "" && m.smtpPass != ""
 }
 
+func (m *Mailer) resendEnabled() bool {
+	return m.resendKey != ""
+}
+
 func (m *Mailer) mailjetEnabled() bool {
 	return m.apiKey != "" && m.secretKey != ""
 }
 
-// Enabled retourne true si au moins un transport est configuré.
 func (m *Mailer) Enabled() bool {
-	return m.smtpEnabled() || m.mailjetEnabled()
+	return m.smtpEnabled() || m.resendEnabled() || m.mailjetEnabled()
 }
 
 func (m *Mailer) send(subject, htmlBody, textBody, toEmail, toName string) error {
@@ -73,6 +80,10 @@ func (m *Mailer) send(subject, htmlBody, textBody, toEmail, toName string) error
 			fmt.Printf("[MAILER] SMTP erreur: %v\n", err)
 		}
 		return err
+	}
+	if m.resendEnabled() {
+		fmt.Printf("[MAILER] Resend → %s\n", toEmail)
+		return m.sendResend(subject, htmlBody, toEmail, toName)
 	}
 	if m.mailjetEnabled() {
 		fmt.Printf("[MAILER] Mailjet → %s\n", toEmail)
@@ -104,6 +115,34 @@ func (m *Mailer) sendSMTP(subject, htmlBody, toEmail, toName string) error {
 	)
 	msg := []byte(header + htmlBody)
 	return smtp.SendMail(addr, auth, m.fromEmail, []string{toEmail}, msg)
+}
+
+// ── Resend ──────────────────────────────────────────────────────────────────
+
+func (m *Mailer) sendResend(subject, htmlBody, toEmail, toName string) error {
+	from := fmt.Sprintf("%s <onboarding@resend.dev>", m.fromName)
+	payload := map[string]any{
+		"from":    from,
+		"to":      []string{toEmail},
+		"subject": subject,
+		"html":    htmlBody,
+	}
+	body, _ := json.Marshal(payload)
+	req, err := http.NewRequest(http.MethodPost, "https://api.resend.com/emails", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+m.resendKey)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := m.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("resend request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("resend responded with status %d", resp.StatusCode)
+	}
+	return nil
 }
 
 // ── Mailjet ─────────────────────────────────────────────────────────────────
