@@ -18,7 +18,7 @@ func (a *App) Routes() chi.Router {
 	r.Use(middleware.Recoverer)
 
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins: []string{"http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174", "https://ee5b-74-244-119-50.ngrok-free.app"},
+		AllowedOrigins: []string{"http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174", "https://ee5b-74-244-119-50.ngrok-free.app", "https://oz-backoffice.vercel.app"},
 
 		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
 
