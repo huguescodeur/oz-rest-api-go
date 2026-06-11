@@ -140,7 +140,9 @@ func (m *Mailer) sendResend(subject, htmlBody, toEmail, toName string) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("resend responded with status %d", resp.StatusCode)
+		var buf bytes.Buffer
+		buf.ReadFrom(resp.Body)
+		return fmt.Errorf("resend status %d: %s", resp.StatusCode, buf.String())
 	}
 	return nil
 }
