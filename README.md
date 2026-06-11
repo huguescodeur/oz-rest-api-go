@@ -1,64 +1,63 @@
-# 🗡️ O'Z REST API
+# O'Z REST API
 
-> API REST de gestion de commerce multi-boutiques — construite en Go, inspirée d'un projet Flask, repensée from scratch.
+API REST de gestion de commerce multi-boutiques — construite en Go.
 
-![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go&logoColor=white)
-![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?style=flat&logo=mysql&logoColor=white)
-![Chi](https://img.shields.io/badge/Router-Chi-v5-black?style=flat)
-![Swagger](https://img.shields.io/badge/Docs-Swagger-85EA2D?style=flat&logo=swagger&logoColor=black)
+![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat&logo=go&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat&logo=postgresql&logoColor=white)
+![Chi](https://img.shields.io/badge/Router-Chi_v5-black?style=flat)
 ![JWT](https://img.shields.io/badge/Auth-JWT-000000?style=flat&logo=jsonwebtokens&logoColor=white)
 
 ---
 
-## 📖 À propos
+## À propos
 
-O'Z est une API REST complète pour la gestion de commerces multi-boutiques.  
-Conçue pour des vendeurs qui possèdent plusieurs points de vente et souhaitent centraliser la gestion de leurs produits, stocks et commandes.
-
-Ce projet est une réécriture et amélioration d'un projet Flask existant — migré vers Go pour de meilleures performances, une architecture plus robuste, et une logique métier enrichie (gestion de stock, mouvements, multi-tenant).
+O'Z est une API REST pour la gestion de commerces multi-boutiques et multi-tenants.  
+Chaque administrateur gère ses propres boutiques, produits, stocks et commandes de façon isolée.
 
 ---
 
-## ✨ Fonctionnalités
+## Fonctionnalités
 
-- 🔐 **Authentification JWT** — inscription, connexion, token sécurisé
-- 🏪 **Multi-boutiques** — un utilisateur peut gérer plusieurs shops
-- 📦 **Produits & Catégories** — CRUD complet avec soft delete et restauration
-- 📊 **Gestion de stock** — stock par boutique, entrées, ajustements, historique complet des mouvements
-- 🛒 **Commandes** — création avec décrémentation automatique du stock via transaction SQL, annulation avec restauration
-- 👥 **Multi-tenant** — chaque utilisateur voit uniquement ses propres données
-- 📄 **Documentation Swagger** — interface interactive disponible sur `/swagger`
+- **Authentification JWT** — inscription, connexion, reset de mot de passe par email
+- **Multi-boutiques** — un admin peut gérer plusieurs points de vente
+- **Produits & Catégories** — CRUD complet avec soft delete et restauration
+- **Gestion de stock** — stock par boutique, entrées, ajustements, historique des mouvements, seuil d'alerte
+- **Alertes stock par email** — notification automatique quand le stock passe sous le seuil minimum
+- **Commandes** — création avec décrémentation automatique du stock, confirmation, livraison, annulation avec restauration du stock
+- **Multi-tenant** — chaque utilisateur voit uniquement ses propres données (admin/vendeur/super)
+- **Dashboard** — statistiques et notifications
+- **Super admin** — gestion globale de la plateforme
+- **Documentation Swagger** — interface interactive sur `/swagger`
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
-Pattern **Repository + Service + Handler** (architecture en couches) :
+Pattern **Store → Service → Handler** :
 
 ```
 HTTP Request
      ↓
-[ Transport / Handler ]   → valide la requête, renvoie la réponse HTTP
+[ Handler ]    → valide la requête, renvoie la réponse HTTP
      ↓
-[    Service          ]   → logique métier et règles de validation
+[ Service ]    → logique métier
      ↓
-[    Store            ]   → accès base de données uniquement
+[ Store   ]    → requêtes SQL (pgx/v5)
      ↓
-   MySQL / vous pouvez utiliser PostgreSQL ce que je recommande
+  PostgreSQL
 ```
 
 ```
 internal/
 ├── app/
-│   ├── app.go            # Initialisation de l'application
+│   ├── app.go            # Initialisation des dépendances
 │   └── routes.go         # Déclaration des routes
-├── middlewares/
-│   └── auth_middleware.go
-├── models/               # Structs Go (Product, Order, Stock…)
+├── middlewares/          # Auth, rate limiter, logger
+├── models/               # Structs Go
 ├── pkg/
-│   ├── config/           # Load variables d'environnement
-│   ├── errs/             # Erreurs custom et mapping HTTP
-│   └── responses/        # Helpers de réponses
+│   ├── config/           # Chargement des variables d'environnement
+│   ├── errs/             # Erreurs custom avec codes HTTP
+│   └── mailer/           # Envoi d'emails (SMTP / Mailjet / Resend)
 ├── services/             # Logique métier
 ├── store/                # Requêtes SQL
 └── transport/            # Handlers HTTP
@@ -66,50 +65,76 @@ internal/
 
 ---
 
-## 🗄️ Modèle de données
+## Stack technique
 
-![Database Schema][def]
-_(Vous avez un fichier sql pour une base de données test)_
-
-| Table             | Description                                                     |
-| ----------------- | --------------------------------------------------------------- |
-| `users`           | Utilisateurs avec rôles (`super`, `admin`, `vendeur`)           |
-| `shops`           | Boutiques appartenant à un user                                 |
-| `user_shops`      | Table de liaison user ↔ shop                                    |
-| `categories`      | Catégories de produits                                          |
-| `products`        | Produits globaux (non liés à une boutique)                      |
-| `stocks`          | Stock d'un produit dans une boutique (`product_id` + `shop_id`) |
-| `stock_movements` | Historique de tous les mouvements de stock                      |
-| `orders`          | Commandes par boutique                                          |
-| `order_items`     | Détail des articles d'une commande                              |
+| Outil | Usage |
+|-------|-------|
+| Go 1.26 | Langage principal |
+| Chi v5 | Router HTTP |
+| pgx/v5 | Driver PostgreSQL |
+| golang-jwt | Authentification JWT |
+| google/uuid | Génération d'UUID |
+| go-chi/cors | Gestion CORS |
+| Mailjet / Resend / SMTP | Envoi d'emails |
+| swaggo/swag | Documentation Swagger |
 
 ---
 
-## 🚀 Lancer le projet
+## Déploiement (production)
+
+| Service | Usage |
+|---------|-------|
+| [Supabase](https://supabase.com) | PostgreSQL hébergé (free tier) |
+| [Render](https://render.com) | API Go via Docker (free tier) |
+| [Vercel](https://vercel.com) | Frontend React (free tier) |
+
+---
+
+## Lancer en local
 
 ### Prérequis
 
-- Go 1.21+
-- MySQL 8.0+
+- Go 1.26+
+- PostgreSQL 16+
 
 ### Installation
 
 ```bash
 git clone https://github.com/huguescodeur/oz-rest-api-go.git
-cd zoro_rest_api_go
+cd oz-rest-api-go
 go mod download
 ```
 
 ### Configuration
 
-Créer un fichier `.env` à la racine :
+Copier `.env.example` en `.env` et remplir les valeurs :
+
+```bash
+cp .env.example .env
+```
+
+Variables minimales pour le dev local :
 
 ```env
-DB_USER=dbuser
-DB_PASS=root
-DB_ADDR=db address ex: 127.0.0.1:8889
-DB_NAME=dbname
-JWT_SECRET=secret (peut être généré avec: openssl rand -base64 32)
+DB_USER=oz
+DB_PASS=oz_secret
+DB_ADDR=localhost:5432
+DB_NAME=oz_db
+JWT_SECRET=          # openssl rand -base64 32
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=ton_email@gmail.com
+SMTP_PASS=           # App Password Google
+MAIL_FROM=ton_email@gmail.com
+FRONTEND_URL=http://localhost:5173
+```
+
+### Base de données
+
+```bash
+psql -U oz -d oz_db -f zorodb.sql
+psql -U oz -d oz_db -f migrations/001_order_features_and_categories.sql
+psql -U oz -d oz_db -f migrations/002_delivery_address.sql
 ```
 
 ### Lancer
@@ -118,155 +143,21 @@ JWT_SECRET=secret (peut être généré avec: openssl rand -base64 32)
 go run main.go
 ```
 
-L'API sera disponible sur `http://localhost:8080`  
-La documentation Swagger sur `http://localhost:8080/swagger/index.html`
+API disponible sur `http://localhost:8080`  
+Swagger sur `http://localhost:8080/swagger/index.html`
 
 ---
 
-## 📡 Endpoints
+## Rôles utilisateurs
 
-### Auth
-
-| Méthode | Route                         | Description                                     |
-| ------- | ----------------------------- | ----------------------------------------------- |
-| POST    | `/api/v1/auth/register`       | Inscription                                     |
-| POST    | `/api/v1/auth/login`          | Connexion → retourne JWT                        |
-| POST    | `/api/v1/auth/logout`         | Déconnexion _(auth required)_                   |
-| PATCH   | `/api/v1/auth/reset-password` | Réinitialiser le mot de passe _(auth required)_ |
-
-### Produits _(auth required)_
-
-| Méthode | Route                     | Description             |
-| ------- | ------------------------- | ----------------------- |
-| GET     | `/api/v1/products`        | Liste tous les produits |
-| POST    | `/api/v1/products`        | Créer un produit        |
-| GET     | `/api/v1/products/{uuid}` | Détail d'un produit     |
-| PUT     | `/api/v1/products/{uuid}` | Modifier un produit     |
-| DELETE  | `/api/v1/products/{uuid}` | Soft delete             |
-| PATCH   | `/api/v1/products/{uuid}` | Restaurer               |
-
-### Stocks _(auth required)_
-
-| Méthode | Route                                          | Description                           |
-| ------- | ---------------------------------------------- | ------------------------------------- |
-| GET     | `/api/v1/stocks`                               | Tous les stocks                       |
-| GET     | `/api/v1/stocks/detail?product_id=X&shop_id=Y` | Stock précis                          |
-| POST    | `/api/v1/stocks/init`                          | Initialiser un stock à 0              |
-| POST    | `/api/v1/stocks/in`                            | Entrée de marchandise                 |
-| POST    | `/api/v1/stocks/adjust`                        | Ajustement manuel (SALE, GIFT, LOSS…) |
-| GET     | `/api/v1/stocks/movements`                     | Historique des mouvements             |
-| GET     | `/api/v1/stocks/movements/product/{id}`        | Mouvements par produit                |
-| GET     | `/api/v1/stocks/movements/shop/{id}`           | Mouvements par boutique               |
-
-### Commandes _(auth required)_
-
-| Méthode | Route                   | Description                  |
-| ------- | ----------------------- | ---------------------------- |
-| GET     | `/api/v1/orders`        | Toutes les commandes         |
-| POST    | `/api/v1/orders`        | Créer une commande           |
-| GET     | `/api/v1/orders/{uuid}` | Détail d'une commande        |
-| DELETE  | `/api/v1/orders/{uuid}` | Annuler + restaurer le stock |
-
-### Boutiques _(auth required)_
-
-| Méthode | Route                          | Description                        |
-| ------- | ------------------------------ | ---------------------------------- |
-| GET     | `/api/v1/shops`                | Liste toutes les boutiques         |
-| POST    | `/api/v1/shops`                | Créer une boutique                 |
-| GET     | `/api/v1/shops/vendeur`        | Boutiques d'un vendeur             |
-| POST    | `/api/v1/shops/assign-vendeur` | Assigner un vendeur à une boutique |
-| GET     | `/api/v1/shops/{uuid}`         | Détail d'une boutique              |
-| PUT     | `/api/v1/shops/{uuid}`         | Modifier une boutique              |
-| DELETE  | `/api/v1/shops/{uuid}`         | Soft delete                        |
-| PATCH   | `/api/v1/shops/{uuid}`         | Restaurer                          |
-
-### Utilisateurs _(auth required)_
-
-| Méthode | Route                  | Description                 |
-| ------- | ---------------------- | --------------------------- |
-| GET     | `/api/v1/users`        | Liste tous les utilisateurs |
-| POST    | `/api/v1/users`        | Ajouter un utilisateur      |
-| GET     | `/api/v1/users/{uuid}` | Détail d'un utilisateur     |
-| PUT     | `/api/v1/users/{uuid}` | Modifier un utilisateur     |
-| DELETE  | `/api/v1/users/{uuid}` | Soft delete                 |
-| PATCH   | `/api/v1/users/{uuid}` | Restaurer                   |
+| Rôle | Accès |
+|------|-------|
+| `super` | Accès global à toute la plateforme |
+| `admin` | Gère ses propres boutiques, produits, stocks, commandes |
+| `vendeur` | Accès restreint aux boutiques qui lui sont assignées |
 
 ---
 
-## 🔑 Authentification
+## Auteur
 
-Toutes les routes protégées nécessitent un header :
-
-```
-Authorization: Bearer <token>
-```
-
-Le token est retourné à la connexion (`/auth/login`).
-
----
-
-## 📦 Exemple de requête
-
-### Créer une commande
-
-```bash
-curl -X POST http://localhost:8080/api/v1/orders \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "shop_id": 1,
-    "items": [
-      { "product_id": 3, "quantity": 2 },
-      { "product_id": 7, "quantity": 1 }
-    ]
-  }'
-```
-
-> Le stock est décrémenté automatiquement via transaction SQL. Si le stock est insuffisant pour un article, toute la commande est annulée (rollback).
-
----
-
-## 🛠️ Stack technique
-
-| Outil                                                                 | Usage                   |
-| --------------------------------------------------------------------- | ----------------------- |
-| [Go](https://golang.org/)                                             | Langage principal       |
-| [Chi](https://github.com/go-chi/chi)                                  | Router HTTP             |
-| [MySQL](https://www.mysql.com/)                                       | Base de données         |
-| [JWT (golang-jwt)](https://github.com/golang-jwt/jwt)                 | Authentification        |
-| [go-playground/validator](https://github.com/go-playground/validator) | Validation des requêtes |
-| [google/uuid](https://github.com/google/uuid)                         | Génération d'UUID       |
-| [swaggo/swag](https://github.com/swaggo/swag)                         | Génération Swagger      |
-| [go-chi/cors](https://github.com/go-chi/cors)                         | Gestion CORS            |
-
----
-
-## 📄 Documentation complète
-
-La documentation interactive Swagger est générée automatiquement depuis les annotations du code.
-
-```bash
-# Regénérer la doc Swagger après modifications
-swag init
-```
-
-Puis accéder à : `http://localhost:8080/swagger/index.html`
-
----
-
-## 🤝 Contribuer
-
-Les PR sont les bienvenues. Pour les changements majeurs, ouvrir une issue d'abord.
-
----
-
-## 👤 Auteur
-
-**Goli Yao Hugues / Hugues Codeur**  
-Projet personnel — réécriture et amélioration d'un projet d'apprentissage Flask.
-
----
-
-_O'Z — parce que même une API doit couper net et aussi open source._ 🗡️
-
-[def]: ./docs/schema.png
+**Hugues Codeur**
