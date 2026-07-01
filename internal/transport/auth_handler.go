@@ -33,10 +33,10 @@ type updateMeRequest struct {
 }
 
 type RegisterRequest struct {
-	Username  string `json:"username" validate:"required,min=3" example:"jean_vendeur"`
-	Email     string `json:"email" validate:"required,email" example:"jean@zoro.com"`
+	Username  string `json:"username" validate:"required,min=3" example:"hugues_vendeur"`
+	Email     string `json:"email" validate:"required,email" example:"hugues@zoro.com"`
 	Password  string `json:"password" validate:"required,min=6" example:"pass1234"`
-	Firstname string `json:"firstname" validate:"required" example:"Jean"`
+	Firstname string `json:"firstname" validate:"required" example:"Hugues"`
 	Lastname  string `json:"lastname" validate:"required" example:"Dupont"`
 	Phone     string `json:"phone" validate:"required,len=10" example:"0708091011"`
 	Role      string `json:"role" validate:"required,oneof=admin vendeur" example:"vendeur"`

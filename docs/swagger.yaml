@@ -192,10 +192,10 @@ definitions:
   transport.RegisterRequest:
     properties:
       email:
-        example: jean@zoro.com
+        example: hugues@zoro.com
         type: string
       firstname:
-        example: Jean
+        example: Hugues
         type: string
       lastname:
         example: Dupont
@@ -216,7 +216,7 @@ definitions:
         example: vendeur
         type: string
       username:
-        example: jean_vendeur
+        example: hugues_vendeur
         minLength: 3
         type: string
     required:

@@ -1847,11 +1847,11 @@ const docTemplate = `{
             "properties": {
                 "email": {
                     "type": "string",
-                    "example": "jean@zoro.com"
+                    "example": "hugues@zoro.com"
                 },
                 "firstname": {
                     "type": "string",
-                    "example": "Jean"
+                    "example": "Hugues"
                 },
                 "lastname": {
                     "type": "string",
@@ -1880,7 +1880,7 @@ const docTemplate = `{
                 "username": {
                     "type": "string",
                     "minLength": 3,
-                    "example": "jean_vendeur"
+                    "example": "hugues_vendeur"
                 }
             }
         },
