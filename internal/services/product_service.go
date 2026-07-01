@@ -10,11 +10,12 @@ import (
 )
 
 type ProductService struct {
-	productStore store.ProductStore
+	productStore  store.ProductStore
+	categoryStore store.CategoryStore
 }
 
-func NewProductService(s store.ProductStore) *ProductService {
-	return &ProductService{productStore: s}
+func NewProductService(s store.ProductStore, c store.CategoryStore) *ProductService {
+	return &ProductService{productStore: s, categoryStore: c}
 }
 
 func (p *ProductService) GetAllProducts(ctx context.Context, ownerID, limit, offset int) ([]*models.Product, int, error) {
@@ -26,6 +27,15 @@ func (p *ProductService) GetProductByUUID(ctx context.Context, uuid uuid.UUID, o
 }
 
 func (p *ProductService) CreateProduct(ctx context.Context, model *models.Product) (*models.Product, error) {
+	cat, err := p.categoryStore.GetByID(ctx, model.ProductCategory.CategoryID, model.OwnerID)
+	if err != nil {
+		return nil, errors.New("catégorie introuvable")
+	}
+
+	if cat.OwnerID != model.OwnerID {
+		return nil, errors.New("catégorie non autorisée pour cet utilisateur")
+	}
+
 	if model.ProductUUID == uuid.Nil {
 		model.ProductUUID = uuid.New()
 	}

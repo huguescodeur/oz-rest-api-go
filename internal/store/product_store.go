@@ -38,7 +38,7 @@ func (s *productStore) GetAll(ctx context.Context, ownerID, limit, offset int) (
 	).Scan(&total)
 
 	q := `SELECT
-            p.product_id, p.uuid, p.product_name, p.unit_price, p.created_at, p.updated_at, p.user_id,
+            p.product_id, p.uuid, p.product_name, p.unit_price, p.created_at, p.updated_at, p.user_id, p.description,
             c.category_id, c.uuid, c.category_name, c.user_id
         FROM products p
         INNER JOIN categories c ON p.category_id = c.category_id
@@ -59,7 +59,7 @@ func (s *productStore) GetAll(ctx context.Context, ownerID, limit, offset int) (
 
 		if err = rows.Scan(
 			&product.ProductID, &product.ProductUUID, &product.ProductName,
-			&product.UnitPrice, &product.CreatedAt, &product.UpdatedAt, &product.OwnerID,
+			&product.UnitPrice, &product.CreatedAt, &product.UpdatedAt, &product.OwnerID, &product.Description,
 			&product.ProductCategory.CategoryID, &product.ProductCategory.CategoryUUID,
 			&product.ProductCategory.CategoryName, &product.ProductCategory.OwnerID,
 		); err != nil {
@@ -72,7 +72,7 @@ func (s *productStore) GetAll(ctx context.Context, ownerID, limit, offset int) (
 
 func (s *productStore) GetByUUID(ctx context.Context, uuid uuid.UUID, ownerID int) (*models.Product, error) {
 	q := `SELECT
-            p.product_id, p.uuid, p.product_name, p.unit_price, p.created_at, p.updated_at, p.user_id,
+            p.product_id, p.uuid, p.product_name, p.unit_price, p.created_at, p.updated_at, p.user_id, p.description,
             c.category_id, c.uuid, c.category_name, c.user_id
         FROM products p
         INNER JOIN categories c ON p.category_id = c.category_id
@@ -82,7 +82,7 @@ func (s *productStore) GetByUUID(ctx context.Context, uuid uuid.UUID, ownerID in
 	category := &models.Category{}
 	if err := s.db.QueryRow(ctx, q, uuid, ownerID).Scan(
 		&product.ProductID, &product.ProductUUID, &product.ProductName,
-		&product.UnitPrice, &product.CreatedAt, &product.UpdatedAt, &product.OwnerID,
+		&product.UnitPrice, &product.CreatedAt, &product.UpdatedAt, &product.OwnerID, &product.Description,
 		&category.CategoryID, &category.CategoryUUID, &category.CategoryName, &category.OwnerID,
 	); err != nil {
 		return nil, err
@@ -93,7 +93,7 @@ func (s *productStore) GetByUUID(ctx context.Context, uuid uuid.UUID, ownerID in
 
 func (s *productStore) GetByID(ctx context.Context, productID, ownerID int) (*models.Product, error) {
 	q := `SELECT
-            p.product_id, p.uuid, p.product_name, p.unit_price, p.created_at, p.updated_at, p.user_id,
+            p.product_id, p.uuid, p.product_name, p.unit_price, p.created_at, p.updated_at, p.user_id, p.description,
             c.category_id, c.uuid, c.category_name, c.user_id
         FROM products p
         INNER JOIN categories c ON p.category_id = c.category_id
@@ -103,7 +103,7 @@ func (s *productStore) GetByID(ctx context.Context, productID, ownerID int) (*mo
 	category := &models.Category{}
 	if err := s.db.QueryRow(ctx, q, productID, ownerID).Scan(
 		&product.ProductID, &product.ProductUUID, &product.ProductName,
-		&product.UnitPrice, &product.CreatedAt, &product.UpdatedAt, &product.OwnerID,
+		&product.UnitPrice, &product.CreatedAt, &product.UpdatedAt, &product.OwnerID, &product.Description,
 		&category.CategoryID, &category.CategoryUUID, &category.CategoryName, &category.OwnerID,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -117,13 +117,13 @@ func (s *productStore) GetByID(ctx context.Context, productID, ownerID int) (*mo
 
 func (s *productStore) Create(ctx context.Context, product *models.Product) (*models.Product, error) {
 	timeNow := time.Now().UTC()
-	q := `INSERT INTO products (uuid, product_name, category_id, unit_price, created_at, updated_at, user_id)
-          VALUES ($1, $2, $3, $4, $5, $6, $7)`
+	q := `INSERT INTO products (uuid, product_name, category_id, unit_price, created_at, updated_at, user_id, description)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
 
 	_, err := s.db.Exec(ctx, q,
 		product.ProductUUID, product.ProductName,
 		product.ProductCategory.CategoryID, product.UnitPrice,
-		timeNow, timeNow, product.OwnerID,
+		timeNow, timeNow, product.OwnerID, product.Description,
 	)
 	if err != nil {
 		return nil, err

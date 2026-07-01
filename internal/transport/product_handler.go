@@ -2,6 +2,7 @@ package transport
 
 import (
 	"encoding/json"
+	"log"
 	"math"
 	"net/http"
 	"strconv"
@@ -22,9 +23,10 @@ type productsResponse struct {
 }
 
 type productRequest struct {
-	Name       string `json:"productName" validate:"required"`
-	CategoryID int    `json:"categoryID" validate:"required"`
-	UnitPrice  int    `json:"unitPrice" validate:"required,gte=0"`
+	Name        string `json:"product_name" validate:"required"`
+	CategoryID  int    `json:"category_id" validate:"required"`
+	UnitPrice   int    `json:"unit_price" validate:"required,gte=0"`
+	Description string `json:"description" `
 }
 
 type ProductHandler struct {
@@ -128,7 +130,8 @@ func (h *ProductHandler) CreateProductHandler(w http.ResponseWriter, r *http.Req
 
 	var req productRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Json Invalide", http.StatusBadRequest)
+		// fmt.Println("Erreur Json:", err.Error())
+		http.Error(w, "Erreur Json:", http.StatusBadRequest)
 		return
 	}
 
@@ -142,6 +145,7 @@ func (h *ProductHandler) CreateProductHandler(w http.ResponseWriter, r *http.Req
 		ProductName: req.Name,
 		UnitPrice:   req.UnitPrice,
 		OwnerID:     ownerID,
+		Description: req.Description,
 	}
 	if req.CategoryID > 0 {
 		productModel.ProductCategory = &models.Category{CategoryID: req.CategoryID}
@@ -149,7 +153,13 @@ func (h *ProductHandler) CreateProductHandler(w http.ResponseWriter, r *http.Req
 
 	product, err := h.productService.CreateProduct(ctx, productModel)
 	if err != nil {
-		http.Error(w, errs.SafeMessage(err, errs.MapHTTPError(err)), errs.MapHTTPError(err))
+		if err.Error() == "catégorie introuvable" {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		// fmt.Println("Erreur Create:", err.Error())
+		// errs.SafeMessage(err, errs.MapHTTPError(err))
+		http.Error(w, err.Error(), errs.MapHTTPError(err))
 		return
 	}
 
@@ -176,6 +186,7 @@ func (h *ProductHandler) UpdateProductByUUIDHandler(w http.ResponseWriter, r *ht
 
 	productUUID, err := uuid.Parse(chi.URLParam(r, "uuid"))
 	if err != nil {
+		log.Println("Product UUID:", productUUID)
 		http.Error(w, "Format d'identifiant invalide", http.StatusBadRequest)
 		return
 	}
