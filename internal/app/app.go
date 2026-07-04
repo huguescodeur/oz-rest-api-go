@@ -35,7 +35,7 @@ func Init(db *pgxpool.Pool) *App {
 
 	authService := services.NewAuthService(authStore, userStore)
 	userService := services.NewUserService(userStore, authStore)
-	productService := services.NewProductService(productStore, categoryStore)
+	productService := services.NewProductService(productStore, categoryStore, shopStore, stockStore)
 	shopService := services.NewShopService(shopStore)
 	stockService := services.NewStockService(stockStore, userStore, m)
 	orderService := services.NewOrderService(orderStore, productStore, stockService)
