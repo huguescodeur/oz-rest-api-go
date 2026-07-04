@@ -22,10 +22,10 @@ type shopsResponse struct {
 }
 
 type shopRequest struct {
-	ShopName    string `json:"shopName" validate:"required,min=3"`
-	ShopAddress string `json:"shopAddress" validate:"required"`
-	ShopPhone   string `json:"shopPhone" validate:"required"`
-	ShopMail    string `json:"shopMail" validate:"required"`
+	ShopName    string `json:"shop_name" validate:"required,min=3"`
+	ShopAddress string `json:"shop_address" validate:"required"`
+	ShopPhone   string `json:"shop_phone" validate:"required"`
+	ShopMail    string `json:"shop_mail" validate:"required"`
 }
 
 type AssignShopsRequest struct {
