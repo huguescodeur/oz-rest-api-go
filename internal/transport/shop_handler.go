@@ -25,7 +25,8 @@ type shopRequest struct {
 	ShopName    string `json:"shop_name" validate:"required,min=3"`
 	ShopAddress string `json:"shop_address" validate:"required"`
 	ShopPhone   string `json:"shop_phone" validate:"required"`
-	ShopMail    string `json:"shop_mail" validate:"required"`
+	ShopMail    string `json:"shop_mail" validate:"omitempty,email"`
+	// ShopMail    string `json:"shop_mail" validate:"required"`
 }
 
 type AssignShopsRequest struct {
